@@ -22,7 +22,7 @@ func ConnectDB(env *Env) (*gorm.DB, error) {
 		return nil, err
 	}
 
-	db.AutoMigrate(&models.User{}, &models.Upload{})
+	db.AutoMigrate(&models.User{}, &models.Upload{}, &models.Blog{}, &models.Like{}, &models.Comment{})
 
 	return db, nil
 }

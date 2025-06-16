@@ -70,7 +70,7 @@ func (h *AuthHandler) GoogleAuth(c *gin.Context) {
 
 	if user == nil {
 		user = &models.User{
-			BaseModel: models.BaseModel{
+			Base: models.Base{
 				ID: googleInfo.Sub,
 			},
 			Email:       googleInfo.Email,
@@ -171,7 +171,7 @@ func (h *AuthHandler) FacebookAuth(c *gin.Context) {
 
 	if user == nil {
 		user = &models.User{
-			BaseModel: models.BaseModel{
+			Base: models.Base{
 				ID: facebookInfo.ID,
 			},
 			Email:       facebookInfo.Email,

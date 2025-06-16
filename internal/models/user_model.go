@@ -18,7 +18,7 @@ const (
 )
 
 type User struct {
-	BaseModel
+	Base
 
 	Email         string     `json:"email"`
 	Password      string     `json:"password"`
