@@ -14,13 +14,13 @@ import (
 )
 
 func Start(env *config.Env, db *gorm.DB, hostname string) {
-	gin.SetMode(gin.ReleaseMode)
+	// gin.SetMode(gin.ReleaseMode)
 
 	app := gin.Default()
 
 	app.Use(cors.New(cors.Config{
 		AllowOrigins: []string{"*"},
-		AllowMethods: []string{"GET", "POST", "PUT", "DELETE", "OPTIONS"},
+		AllowMethods: []string{"GET", "POST", "PUT", "PATCH", "DELETE", "OPTIONS"},
 		AllowHeaders: []string{"*"},
 	}))
 
@@ -36,6 +36,8 @@ func Start(env *config.Env, db *gorm.DB, hostname string) {
 		userRepo := repositories.UserRepository{DB: db}
 		authRepo := repositories.AuthRepository{DB: db}
 		uploadRepo := repositories.UploadRepository{DB: db}
+		searchRepo := repositories.SearchRepository{DB: db}
+		blogRepo := repositories.BlogRepository{DB: db}
 
 		authHandler := handlers.AuthHandler{Repo: &authRepo, UserRepo: &userRepo}
 		auth := api.Group("auth")
@@ -62,6 +64,21 @@ func Start(env *config.Env, db *gorm.DB, hostname string) {
 			uploads.POST("file", uploadHandler.Upload)
 			uploads.POST("files", uploadHandler.Uploads)
 			uploads.DELETE(":id", uploadHandler.Delete)
+		}
+
+		searchHandler := handlers.SearchHandler{Repo: &searchRepo}
+		search := api.Group("search")
+		{
+			search.GET(":query", searchHandler.Search)
+		}
+
+		blogHandler := handlers.BlogHandler{Repo: &blogRepo}
+		blogs := api.Group("blogs")
+		{
+			blogs.PATCH(":id/thumbnail-url", middlewares.AccessTokenMiddleware, blogHandler.UpdateThumbnailURL)
+			blogs.POST("", middlewares.AccessTokenMiddleware, blogHandler.Create)
+			blogs.GET("", blogHandler.FindMany)
+			blogs.GET(":id", blogHandler.FindOne)
 		}
 	}
 
