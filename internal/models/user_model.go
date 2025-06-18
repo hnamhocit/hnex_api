@@ -34,4 +34,6 @@ type User struct {
 	Location      *string    `json:"location"`
 	PhoneNumber   *string    `json:"phone_number"`
 	Birthday      *time.Time `json:"birthday"`
+
+	CompletedLessons []LessonCompletion `gorm:"foreignKey:UserID" json:"completed_lessons"`
 }

@@ -4,10 +4,9 @@ type Comment struct {
 	Base
 
 	Content string `json:"content"`
-	Views   int64  `json:"views"`
 
-	CommentableID   string   `json:"commentable_id"`
-	CommentableType string   `json:"commentable_type"`
+	CommentableID   string   `json:"commentable_id" gorm:"index"`
+	CommentableType string   `json:"commentable_type" gorm:"index"`
 	Attachments     []Upload `json:"attachments" gorm:"polymorphic:Uploadable"`
 	Likes           []Like   `json:"likes" gorm:"polymorphic:Likeable"`
 	UserId          string   `json:"user_id"`

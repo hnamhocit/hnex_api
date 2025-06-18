@@ -38,6 +38,8 @@ func Start(env *config.Env, db *gorm.DB, hostname string) {
 		uploadRepo := repositories.UploadRepository{DB: db}
 		searchRepo := repositories.SearchRepository{DB: db}
 		blogRepo := repositories.BlogRepository{DB: db}
+		productRepo := repositories.ProductRepository{DB: db}
+		courseRepo := repositories.CourseRepository{DB: db}
 
 		authHandler := handlers.AuthHandler{Repo: &authRepo, UserRepo: &userRepo}
 		auth := api.Group("auth")
@@ -78,7 +80,19 @@ func Start(env *config.Env, db *gorm.DB, hostname string) {
 			blogs.PATCH(":id/thumbnail-url", middlewares.AccessTokenMiddleware, blogHandler.UpdateThumbnailURL)
 			blogs.POST("", middlewares.AccessTokenMiddleware, blogHandler.Create)
 			blogs.GET("", blogHandler.FindMany)
-			blogs.GET(":id", blogHandler.FindOne)
+			blogs.GET(":slug", blogHandler.FindOne)
+		}
+
+		courseHandler := handlers.CourseHandler{Repo: &courseRepo}
+		courses := api.Group("courses")
+		{
+			courses.GET("", courseHandler.FindMany)
+		}
+
+		productHandler := handlers.ProductHandler{Repo: &productRepo}
+		products := api.Group("products")
+		{
+			products.GET("", productHandler.FindMany)
 		}
 	}
 

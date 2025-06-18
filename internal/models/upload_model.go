@@ -7,8 +7,8 @@ type Upload struct {
 	Size int64  `json:"size"`
 	Path string `json:"path"`
 
-	UploadableID   string `json:"uploadable_id"`
-	UploadableType string `json:"uploadable_type"`
+	UploadableID   string `json:"uploadable_id" gorm:"index"`
+	UploadableType string `json:"uploadable_type" gorm:"index"`
 	UserId         string `json:"user_id"`
 	User           User   `gorm:"foreignKey:UserId" json:"user"`
 }
