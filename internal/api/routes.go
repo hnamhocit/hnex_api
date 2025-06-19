@@ -26,22 +26,31 @@ func Start(env *config.Env, db *gorm.DB, hostname string) {
 
 	app.Static("/assets", "./assets")
 
+	// Repositories
+	userRepo := repositories.UserRepository{DB: db}
+	authRepo := repositories.AuthRepository{DB: db}
+	uploadRepo := repositories.UploadRepository{DB: db}
+	searchRepo := repositories.SearchRepository{DB: db}
+	blogRepo := repositories.BlogRepository{DB: db}
+	productRepo := repositories.ProductRepository{DB: db}
+	courseRepo := repositories.CourseRepository{DB: db}
+	ipGeoInfoRepo := repositories.IpGeoInfoRepository{DB: db}
+
+	// Handlers
+	authHandler := handlers.AuthHandler{Repo: &authRepo, UserRepo: &userRepo, IpGeoInfoRepo: &ipGeoInfoRepo}
+	uploadHandler := handlers.UploadHandler{Repo: &uploadRepo}
+	userHandler := handlers.UserHandler{Repo: &userRepo}
+	searchHandler := handlers.SearchHandler{Repo: &searchRepo}
+	blogHandler := handlers.BlogHandler{Repo: &blogRepo}
+	courseHandler := handlers.CourseHandler{Repo: &courseRepo}
+	productHandler := handlers.ProductHandler{Repo: &productRepo}
+
 	api := app.Group("api")
 	{
 		api.GET("health", func(c *gin.Context) {
 			c.JSON(http.StatusOK, gin.H{"message": "OK"})
 		})
 
-		// Repositories
-		userRepo := repositories.UserRepository{DB: db}
-		authRepo := repositories.AuthRepository{DB: db}
-		uploadRepo := repositories.UploadRepository{DB: db}
-		searchRepo := repositories.SearchRepository{DB: db}
-		blogRepo := repositories.BlogRepository{DB: db}
-		productRepo := repositories.ProductRepository{DB: db}
-		courseRepo := repositories.CourseRepository{DB: db}
-
-		authHandler := handlers.AuthHandler{Repo: &authRepo, UserRepo: &userRepo}
 		auth := api.Group("auth")
 		{
 			auth.POST("register", authHandler.Register)
@@ -52,14 +61,12 @@ func Start(env *config.Env, db *gorm.DB, hostname string) {
 			auth.GET("facebook", authHandler.FacebookAuth)
 		}
 
-		userHandler := handlers.UserHandler{Repo: &userRepo}
 		users := api.Group("users")
 		{
 			users.GET("profile", middlewares.AccessTokenMiddleware, userHandler.GetProfile)
 			users.GET(":id", userHandler.GetUser)
 		}
 
-		uploadHandler := handlers.UploadHandler{Repo: &uploadRepo}
 		uploads := api.Group("uploads")
 		uploads.Use(middlewares.AccessTokenMiddleware)
 		{
@@ -68,13 +75,11 @@ func Start(env *config.Env, db *gorm.DB, hostname string) {
 			uploads.DELETE(":id", uploadHandler.Delete)
 		}
 
-		searchHandler := handlers.SearchHandler{Repo: &searchRepo}
 		search := api.Group("search")
 		{
 			search.GET(":query", searchHandler.Search)
 		}
 
-		blogHandler := handlers.BlogHandler{Repo: &blogRepo}
 		blogs := api.Group("blogs")
 		{
 			blogs.PATCH(":id/thumbnail-url", middlewares.AccessTokenMiddleware, blogHandler.UpdateThumbnailURL)
@@ -83,13 +88,11 @@ func Start(env *config.Env, db *gorm.DB, hostname string) {
 			blogs.GET(":slug", blogHandler.FindOne)
 		}
 
-		courseHandler := handlers.CourseHandler{Repo: &courseRepo}
 		courses := api.Group("courses")
 		{
 			courses.GET("", courseHandler.FindMany)
 		}
 
-		productHandler := handlers.ProductHandler{Repo: &productRepo}
 		products := api.Group("products")
 		{
 			products.GET("", productHandler.FindMany)

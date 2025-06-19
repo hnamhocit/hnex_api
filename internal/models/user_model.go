@@ -33,7 +33,8 @@ type User struct {
 	BackgroundURL *string    `json:"background_url"`
 	Location      *string    `json:"location"`
 	PhoneNumber   *string    `json:"phone_number"`
-	Birthday      *time.Time `json:"birthday"`
+	BirthDay      *time.Time `json:"birth_day"`
 
 	CompletedLessons []LessonCompletion `gorm:"foreignKey:UserID" json:"completed_lessons"`
+	IpGeoInfo        IpGeoInfo          `json:"ip_geo_info" gorm:"foreignKey:UserId"`
 }

@@ -15,7 +15,7 @@ func (r *UserRepository) UpdateById(id string, user *models.User) error {
 
 func (r *UserRepository) FindById(id string) (*models.User, error) {
 	var user models.User
-	if err := r.DB.Where("id = ?", id).First(&user).Error; err != nil {
+	if err := r.DB.Where("id = ?", id).Preload("IpGeoInfo").First(&user).Error; err != nil {
 		return nil, err
 	}
 

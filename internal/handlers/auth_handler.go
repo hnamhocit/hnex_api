@@ -5,6 +5,7 @@ import (
 	"encoding/json"
 	"fmt"
 	"io"
+	"log"
 	"net/http"
 	"os"
 	"time"
@@ -20,8 +21,9 @@ import (
 )
 
 type AuthHandler struct {
-	Repo     *repositories.AuthRepository
-	UserRepo *repositories.UserRepository
+	Repo          *repositories.AuthRepository
+	UserRepo      *repositories.UserRepository
+	IpGeoInfoRepo *repositories.IpGeoInfoRepository
 }
 
 // Providers Auth
@@ -208,49 +210,65 @@ func (h *AuthHandler) FacebookAuth(c *gin.Context) {
 // App Auth
 
 func (h *AuthHandler) Register(c *gin.Context) {
-	var user dtos.RegisterDto
-	if err := c.ShouldBindJSON(&user); err != nil {
+	var data dtos.RegisterDto
+	if err := c.ShouldBindJSON(&data); err != nil {
 		c.JSON(http.StatusBadRequest, gin.H{"code": 0, "msg": err.Error()})
 		return
 	}
 
-	existingUser, err := h.UserRepo.FindByEmail(user.Email)
+	existingUser, err := h.UserRepo.FindByEmail(data.Email)
 	if err != nil && err != gorm.ErrRecordNotFound {
 		c.JSON(http.StatusInternalServerError, gin.H{"code": 0, "msg": err.Error()})
 		return
 	}
 
 	if existingUser != nil {
-		c.JSON(http.StatusBadRequest, gin.H{"code": 0, "msg": "User already exists"})
+		c.JSON(http.StatusConflict, gin.H{"code": 0, "msg": "User already exists"})
 		return
 	}
 
-	hashedPassword, err := utils.HashPassword(user.Password)
+	hashedPassword, err := utils.HashPassword(data.Password)
 	if err != nil {
 		c.JSON(http.StatusInternalServerError, gin.H{"code": 0, "msg": err.Error()})
 		return
 	}
 
-	userModel := &models.User{
-		Email:       user.Email,
+	user := models.User{
+		Email:       data.Email,
 		Password:    hashedPassword,
-		DisplayName: user.DisplayName,
+		DisplayName: data.DisplayName,
 	}
 
-	err = h.Repo.CreateUser(userModel)
+	err = h.Repo.CreateUser(&user)
 	if err != nil {
 		c.JSON(http.StatusInternalServerError, gin.H{"code": 0, "msg": err.Error()})
 		return
 	}
 
-	accessToken, refreshToken, err := utils.GenerateTokens(userModel.ID, userModel.Role, "native")
+	accessToken, refreshToken, err := utils.GenerateTokens(user.ID, user.Role, "native")
 	if err != nil {
 		c.JSON(http.StatusInternalServerError, gin.H{"code": 0, "msg": err.Error()})
 		return
 	}
 
-	err = h.Repo.UpdateRefreshToken(userModel.ID, &refreshToken)
-	if err != nil {
+	log.Println(data)
+
+	if err := h.IpGeoInfoRepo.Create(&models.IpGeoInfo{
+		IP:            data.IpGeoInfo.IP,
+		ASN:           data.IpGeoInfo.ASN,
+		ASName:        data.IpGeoInfo.ASName,
+		ASDomain:      data.IpGeoInfo.ASDomain,
+		CountryCode:   data.IpGeoInfo.CountryCode,
+		Country:       data.IpGeoInfo.Country,
+		ContinentCode: data.IpGeoInfo.ContinentCode,
+		Continent:     data.IpGeoInfo.Continent,
+		UserId:        user.ID,
+	}); err != nil {
+		c.JSON(http.StatusInternalServerError, gin.H{"code": 0, "msg": err.Error()})
+		return
+	}
+
+	if err := h.Repo.UpdateRefreshToken(user.ID, &refreshToken); err != nil {
 		c.JSON(http.StatusInternalServerError, gin.H{"code": 0, "msg": err.Error()})
 		return
 	}

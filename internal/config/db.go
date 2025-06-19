@@ -8,16 +8,8 @@ import (
 )
 
 func ConnectDB(env *Env) (*gorm.DB, error) {
-	var dns string
-
-	if env.NODE_ENV == "development" {
-		dns = env.DEV_DB_URL
-	} else {
-		dns = env.PROD_DB_URL
-	}
-
 	db, err := gorm.Open(postgres.Open(
-		dns,
+		env.DB_URL,
 	), &gorm.Config{
 		Logger: logger.Default.LogMode(logger.Info),
 	})
@@ -39,6 +31,7 @@ func ConnectDB(env *Env) (*gorm.DB, error) {
 		&models.LessonGroup{},
 		&models.Tag{},
 		&models.Taggable{},
+		&models.IpGeoInfo{},
 	)
 
 	return db, nil

@@ -9,10 +9,8 @@ import (
 )
 
 type Env struct {
-	NODE_ENV    string
-	DEV_DB_URL  string
-	PROD_DB_URL string
-	PORT        int
+	DB_URL string
+	PORT   int
 }
 
 func LoadEnv() *Env {
@@ -27,9 +25,7 @@ func LoadEnv() *Env {
 	}
 
 	return &Env{
-		NODE_ENV:    os.Getenv("NODE_ENV"),
-		DEV_DB_URL:  os.Getenv("DEV_DB_URL"),
-		PROD_DB_URL: os.Getenv("PROD_DB_URL"),
-		PORT:        PORT,
+		DB_URL: os.Getenv("DB_URL"),
+		PORT:   PORT,
 	}
 }
