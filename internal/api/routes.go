@@ -62,8 +62,10 @@ func Start(env *config.Env, db *gorm.DB, hostname string) {
 		}
 
 		users := api.Group("users")
+		users.Use(middlewares.AccessTokenMiddleware)
 		{
-			users.GET("profile", middlewares.AccessTokenMiddleware, userHandler.GetProfile)
+			users.PUT(":id", userHandler.UpdateProfile)
+			users.GET("profile", userHandler.GetProfile)
 			users.GET(":id", userHandler.GetUser)
 		}
 

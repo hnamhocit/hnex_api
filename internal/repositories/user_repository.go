@@ -2,6 +2,7 @@ package repositories
 
 import (
 	"gorm.io/gorm"
+	dtos "hnex.com/internal/dtos/user"
 	"hnex.com/internal/models"
 )
 
@@ -9,8 +10,8 @@ type UserRepository struct {
 	DB *gorm.DB
 }
 
-func (r *UserRepository) UpdateById(id string, user *models.User) error {
-	return r.DB.Model(&models.User{}).Where("id = ?", id).Updates(user).Error
+func (r *UserRepository) UpdateFieldsById(id string, fields dtos.UpdateProfileDTO) error {
+	return r.DB.Model(&models.User{}).Where("id = ?", id).Updates(fields).Error
 }
 
 func (r *UserRepository) FindById(id string) (*models.User, error) {

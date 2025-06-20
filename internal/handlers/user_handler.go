@@ -5,12 +5,32 @@ import (
 	"net/http"
 
 	"github.com/gin-gonic/gin"
+	dtos "hnex.com/internal/dtos/user"
 	"hnex.com/internal/repositories"
 	"hnex.com/internal/utils"
 )
 
 type UserHandler struct {
 	Repo *repositories.UserRepository
+}
+
+func (h *UserHandler) UpdateProfile(c *gin.Context) {
+	var payload dtos.UpdateProfileDTO
+	if err := c.ShouldBindJSON(&payload); err != nil {
+		c.JSON(http.StatusBadRequest, gin.H{"code": 0, "msg": err.Error()})
+		return
+	}
+
+	user, err := utils.GetUserCtx(c)
+	if err != nil {
+		c.JSON(http.StatusNotFound, gin.H{"error": err.Error()})
+		return
+	}
+
+	if err := h.Repo.UpdateFieldsById(user.Sub, payload); err != nil {
+		c.JSON(http.StatusNotFound, gin.H{"error": err.Error()})
+		return
+	}
 }
 
 func (h *UserHandler) GetUser(c *gin.Context) {

@@ -22,12 +22,12 @@ type User struct {
 
 	Email         string     `json:"email"`
 	Password      string     `json:"password"`
-	DisplayName   string     `json:"display_name"`
 	Provider      string     `json:"provider" gorm:"default:native"`
 	Role          Role       `json:"role" gorm:"default:USER"`
+	RefreshToken  *string    `json:"refresh_token"`
+	DisplayName   string     `json:"display_name"`
 	Gender        Gender     `json:"gender" gorm:"default:UNKNOWN"`
 	Username      *string    `json:"username" gorm:"unique"`
-	RefreshToken  *string    `json:"refresh_token"`
 	Bio           *string    `json:"bio"`
 	PhotoURL      *string    `json:"photo_url"`
 	BackgroundURL *string    `json:"background_url"`

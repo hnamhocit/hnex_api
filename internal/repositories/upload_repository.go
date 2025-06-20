@@ -18,5 +18,20 @@ func (r *UploadRepository) CreateMany(uploads []*models.Upload) error {
 }
 
 func (r *UploadRepository) Delete(id string) error {
-	return r.DB.Where("id = ?", id).Delete(&models.Upload{}).Error
+	return r.DB.Unscoped().Where("id = ?", id).Delete(&models.Upload{}).Error
+}
+
+func (r *UploadRepository) FindOneByUserId(id string) (*models.Upload, error) {
+	var upload models.Upload
+
+	result := r.DB.Preload("User").First(&upload, "user_id = ?", id)
+
+	if result.Error != nil {
+		if result.Error == gorm.ErrRecordNotFound {
+			return nil, nil
+		}
+		return nil, result.Error
+	}
+
+	return &upload, nil
 }
