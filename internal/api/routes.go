@@ -11,10 +11,11 @@ import (
 	"hnex.com/internal/handlers"
 	"hnex.com/internal/middlewares"
 	"hnex.com/internal/repositories"
+	"hnex.com/internal/services"
 )
 
 func Start(env *config.Env, db *gorm.DB, hostname string) {
-	// gin.SetMode(gin.ReleaseMode)
+	gin.SetMode(gin.ReleaseMode)
 
 	app := gin.Default()
 
@@ -24,28 +25,35 @@ func Start(env *config.Env, db *gorm.DB, hostname string) {
 		AllowHeaders: []string{"*"},
 	}))
 
-	app.Static("/assets", "./assets")
-
 	// Repositories
 	userRepo := repositories.UserRepository{DB: db}
 	authRepo := repositories.AuthRepository{DB: db}
 	uploadRepo := repositories.UploadRepository{DB: db}
-	searchRepo := repositories.SearchRepository{DB: db}
 	blogRepo := repositories.BlogRepository{DB: db}
 	productRepo := repositories.ProductRepository{DB: db}
 	courseRepo := repositories.CourseRepository{DB: db}
 	ipGeoInfoRepo := repositories.IpGeoInfoRepository{DB: db}
 
+	// Services
+	uploadService := services.UploadService{Repo: &uploadRepo}
+	blogService := services.BlogService{Repo: &blogRepo, UploadService: &uploadService}
+	courseService := services.CourseService{Repo: &courseRepo}
+	productService := services.ProductService{Repo: &productRepo}
+	searchService := services.SearchService{BlogRepo: &blogRepo, CourseRepo: &courseRepo}
+
 	// Handlers
 	authHandler := handlers.AuthHandler{Repo: &authRepo, UserRepo: &userRepo, IpGeoInfoRepo: &ipGeoInfoRepo}
-	uploadHandler := handlers.UploadHandler{Repo: &uploadRepo}
+	uploadHandler := handlers.UploadHandler{Repo: &uploadRepo, Service: &uploadService}
 	userHandler := handlers.UserHandler{Repo: &userRepo}
-	searchHandler := handlers.SearchHandler{Repo: &searchRepo}
-	blogHandler := handlers.BlogHandler{Repo: &blogRepo}
-	courseHandler := handlers.CourseHandler{Repo: &courseRepo}
-	productHandler := handlers.ProductHandler{Repo: &productRepo}
+	searchHandler := handlers.SearchHandler{Service: &searchService}
+	blogHandler := handlers.BlogHandler{Service: &blogService}
+	courseHandler := handlers.CourseHandler{Service: &courseService}
+	productHandler := handlers.ProductHandler{Service: &productService}
 
 	api := app.Group("api")
+
+	api.Static("/assets", "./assets")
+
 	{
 		api.GET("health", func(c *gin.Context) {
 			c.JSON(http.StatusOK, gin.H{"message": "OK"})
@@ -79,15 +87,15 @@ func Start(env *config.Env, db *gorm.DB, hostname string) {
 
 		search := api.Group("search")
 		{
-			search.GET(":query", searchHandler.Search)
+			search.GET("blogs", searchHandler.SearchBlogs)
+			search.GET("courses", searchHandler.SearchCourses)
 		}
 
 		blogs := api.Group("blogs")
 		{
-			blogs.PATCH(":id/thumbnail-url", middlewares.AccessTokenMiddleware, blogHandler.UpdateThumbnailURL)
-			blogs.POST("", middlewares.AccessTokenMiddleware, blogHandler.Create)
-			blogs.GET("", blogHandler.FindMany)
-			blogs.GET(":slug", blogHandler.FindOne)
+			blogs.POST("", middlewares.AccessTokenMiddleware, blogHandler.CreateBlog)
+			blogs.GET("", blogHandler.GetBlogs)
+			blogs.GET(":slug", blogHandler.GetBlogBySlug)
 		}
 
 		courses := api.Group("courses")

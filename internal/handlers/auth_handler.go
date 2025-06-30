@@ -5,7 +5,6 @@ import (
 	"encoding/json"
 	"fmt"
 	"io"
-	"log"
 	"net/http"
 	"os"
 	"time"
@@ -31,42 +30,42 @@ type AuthHandler struct {
 func (h *AuthHandler) GoogleAuth(c *gin.Context) {
 	var req dtos.GoogleAuthRequest
 	if err := c.ShouldBindJSON(&req); err != nil {
-		c.JSON(http.StatusBadRequest, gin.H{"code": 0, "msg": err.Error()})
+		utils.ResponseError(c, err, http.StatusBadRequest)
 		return
 	}
 
 	resp, err := http.Get("https://oauth2.googleapis.com/tokeninfo?id_token=" + req.IDToken)
 	if err != nil {
-		c.JSON(http.StatusInternalServerError, gin.H{"error": "Failed to validate token with Google"})
+		utils.ResponseError(c, err)
 		return
 	}
 	defer resp.Body.Close()
 
 	if resp.StatusCode != http.StatusOK {
 		bodyBytes, _ := io.ReadAll(resp.Body)
-		c.JSON(resp.StatusCode, gin.H{"error": "Google token validation failed", "details": string(bodyBytes)})
+		utils.ResponseError(c, fmt.Errorf("Google token validation failed: %s", string(bodyBytes)), resp.StatusCode)
 		return
 	}
 
 	var googleInfo dtos.GoogleTokenInfo
 	if err := json.NewDecoder(resp.Body).Decode(&googleInfo); err != nil {
-		c.JSON(http.StatusInternalServerError, gin.H{"error": "Failed to parse Google token info"})
+		utils.ResponseError(c, fmt.Errorf("failed to parse Google token info"))
 		return
 	}
 
 	if googleInfo.Aud != os.Getenv("GOOGLE_CLIENT_ID") {
-		c.JSON(http.StatusUnauthorized, gin.H{"error": "Invalid audience (client ID mismatch)"})
+		utils.ResponseError(c, fmt.Errorf("invalid audience (client ID mismatch)"), http.StatusUnauthorized)
 		return
 	}
 
 	if time.Now().Unix() > googleInfo.Exp {
-		c.JSON(http.StatusUnauthorized, gin.H{"error": "Google token expired"})
+		utils.ResponseError(c, fmt.Errorf("Google token expired"), http.StatusUnauthorized)
 		return
 	}
 
 	user, err := h.UserRepo.FindById(googleInfo.Sub)
-	if err != nil {
-		c.JSON(http.StatusInternalServerError, gin.H{"error": "Failed to find user"})
+	if err != nil && err != gorm.ErrRecordNotFound {
+		utils.ResponseError(c, err)
 		return
 	}
 
@@ -82,35 +81,33 @@ func (h *AuthHandler) GoogleAuth(c *gin.Context) {
 			Provider:    "google",
 		}
 
-		err = h.Repo.CreateUser(user)
-		if err != nil {
-			c.JSON(http.StatusInternalServerError, gin.H{"code": 0, "msg": "Failed to create user"})
+		if err := h.Repo.CreateUser(user); err != nil {
+			utils.ResponseError(c, fmt.Errorf("failed to create user"))
 			return
 		}
 	}
 
 	accessToken, refreshToken, err := utils.GenerateTokens(user.ID, user.Role, user.Provider)
 	if err != nil {
-		c.JSON(http.StatusInternalServerError, gin.H{"error": "Failed to generate JWT"})
+		utils.ResponseError(c, fmt.Errorf("failed to generate JWT"))
 		return
 	}
 
-	err = h.Repo.UpdateRefreshToken(user.ID, &refreshToken)
-	if err != nil {
-		c.JSON(http.StatusInternalServerError, gin.H{"code": 0, "msg": err.Error()})
+	if err := h.Repo.UpdateRefreshToken(user.ID, &refreshToken); err != nil {
+		utils.ResponseError(c, err)
 		return
 	}
 
-	c.JSON(http.StatusOK, gin.H{"code": 1, "msg": "Success", "data": gin.H{
+	utils.ResponseSuccess(c, gin.H{
 		"access_token":  accessToken,
 		"refresh_token": refreshToken,
-	}})
+	}, nil)
 }
 
 func (h *AuthHandler) FacebookAuth(c *gin.Context) {
 	var req dtos.FacebookAuthRequest
 	if err := c.ShouldBindJSON(&req); err != nil {
-		c.JSON(http.StatusBadRequest, gin.H{"error": "Invalid request body", "details": err.Error()})
+		utils.ResponseError(c, err, http.StatusBadRequest)
 		return
 	}
 
@@ -119,55 +116,55 @@ func (h *AuthHandler) FacebookAuth(c *gin.Context) {
 
 	resp, err := http.Get(debugURL)
 	if err != nil {
-		c.JSON(http.StatusInternalServerError, gin.H{"error": "Failed to validate token with Facebook"})
+		utils.ResponseError(c, fmt.Errorf("failed to validate token with Facebook"))
 		return
 	}
 	defer resp.Body.Close()
 
 	if resp.StatusCode != http.StatusOK {
 		bodyBytes, _ := io.ReadAll(resp.Body)
-		c.JSON(resp.StatusCode, gin.H{"error": "Facebook token validation failed", "details": string(bodyBytes)})
+		utils.ResponseError(c, fmt.Errorf("facebook token validation failed: %s", string(bodyBytes)), resp.StatusCode)
 		return
 	}
 
 	var debugInfo dtos.FacebookDebugToken
 	if err := json.NewDecoder(resp.Body).Decode(&debugInfo); err != nil {
-		c.JSON(http.StatusInternalServerError, gin.H{"error": "Failed to parse Facebook debug info"})
+		utils.ResponseError(c, fmt.Errorf("failed to parse Facebook debug info"))
 		return
 	}
 
 	if !debugInfo.Data.IsValid {
-		c.JSON(http.StatusUnauthorized, gin.H{"error": "Facebook token is invalid"})
+		utils.ResponseError(c, fmt.Errorf("facebook token is invalid"), http.StatusUnauthorized)
 		return
 	}
 	if debugInfo.Data.AppID != os.Getenv("FACEBOOK_APP_ID") {
-		c.JSON(http.StatusUnauthorized, gin.H{"error": "Facebook token App ID mismatch"})
+		utils.ResponseError(c, fmt.Errorf("facebook token App ID mismatch"), http.StatusUnauthorized)
 		return
 	}
 
 	userProfileURL := "https://graph.facebook.com/me?fields=id,name,email,picture.width(200).height(200)&access_token=" + req.AccessToken
 	profileResp, err := http.Get(userProfileURL)
 	if err != nil {
-		c.JSON(http.StatusInternalServerError, gin.H{"error": "Failed to fetch Facebook user profile"})
+		utils.ResponseError(c, fmt.Errorf("failed to fetch Facebook user profile"))
 		return
 	}
 	defer profileResp.Body.Close()
 
 	if profileResp.StatusCode != http.StatusOK {
 		bodyBytes, _ := io.ReadAll(profileResp.Body)
-		c.JSON(profileResp.StatusCode, gin.H{"error": "Facebook profile fetch failed", "details": string(bodyBytes)})
+		utils.ResponseError(c, fmt.Errorf("facebook profile fetch failed: %s", string(bodyBytes)), profileResp.StatusCode)
 		return
 	}
 
 	var facebookInfo dtos.FacebookUserInfo
 	if err := json.NewDecoder(profileResp.Body).Decode(&facebookInfo); err != nil {
-		c.JSON(http.StatusInternalServerError, gin.H{"error": "Failed to parse Facebook user info"})
+		utils.ResponseError(c, fmt.Errorf("failed to parse Facebook user info"))
 		return
 	}
 
 	user, err := h.UserRepo.FindById(facebookInfo.ID)
-	if err != nil {
-		c.JSON(http.StatusInternalServerError, gin.H{"error": "Failed to find user"})
+	if err != nil && err != gorm.ErrRecordNotFound {
+		utils.ResponseError(c, fmt.Errorf("failed to find user"))
 		return
 	}
 
@@ -182,29 +179,27 @@ func (h *AuthHandler) FacebookAuth(c *gin.Context) {
 			PhotoURL:    &facebookInfo.Picture.Data.URL,
 		}
 
-		err = h.Repo.CreateUser(user)
-		if err != nil {
-			c.JSON(http.StatusInternalServerError, gin.H{"error": "Failed to create user"})
+		if err := h.Repo.CreateUser(user); err != nil {
+			utils.ResponseError(c, fmt.Errorf("failed to create user"))
 			return
 		}
 	}
 
 	accessToken, refreshToken, err := utils.GenerateTokens(user.ID, user.Role, user.Provider)
 	if err != nil {
-		c.JSON(http.StatusInternalServerError, gin.H{"error": "Failed to generate JWT"})
+		utils.ResponseError(c, fmt.Errorf("failed to generate JWT"))
 		return
 	}
 
-	err = h.Repo.UpdateRefreshToken(user.ID, &refreshToken)
-	if err != nil {
-		c.JSON(http.StatusInternalServerError, gin.H{"code": 0, "msg": err.Error()})
+	if err := h.Repo.UpdateRefreshToken(user.ID, &refreshToken); err != nil {
+		utils.ResponseError(c, err)
 		return
 	}
 
-	c.JSON(http.StatusOK, gin.H{"code": 1, "msg": "Success", "data": gin.H{
+	utils.ResponseSuccess(c, gin.H{
 		"access_token":  accessToken,
 		"refresh_token": refreshToken,
-	}})
+	}, nil)
 }
 
 // App Auth
@@ -212,24 +207,24 @@ func (h *AuthHandler) FacebookAuth(c *gin.Context) {
 func (h *AuthHandler) Register(c *gin.Context) {
 	var data dtos.RegisterDto
 	if err := c.ShouldBindJSON(&data); err != nil {
-		c.JSON(http.StatusBadRequest, gin.H{"code": 0, "msg": err.Error()})
+		utils.ResponseError(c, err, http.StatusBadRequest)
 		return
 	}
 
 	existingUser, err := h.UserRepo.FindByEmail(data.Email)
 	if err != nil && err != gorm.ErrRecordNotFound {
-		c.JSON(http.StatusInternalServerError, gin.H{"code": 0, "msg": err.Error()})
+		utils.ResponseError(c, err)
 		return
 	}
 
 	if existingUser != nil {
-		c.JSON(http.StatusConflict, gin.H{"code": 0, "msg": "User already exists"})
+		utils.ResponseError(c, fmt.Errorf("user already exists"), http.StatusConflict)
 		return
 	}
 
 	hashedPassword, err := utils.HashPassword(data.Password)
 	if err != nil {
-		c.JSON(http.StatusInternalServerError, gin.H{"code": 0, "msg": err.Error()})
+		utils.ResponseError(c, err)
 		return
 	}
 
@@ -239,19 +234,16 @@ func (h *AuthHandler) Register(c *gin.Context) {
 		DisplayName: data.DisplayName,
 	}
 
-	err = h.Repo.CreateUser(&user)
-	if err != nil {
-		c.JSON(http.StatusInternalServerError, gin.H{"code": 0, "msg": err.Error()})
+	if err := h.Repo.CreateUser(&user); err != nil {
+		utils.ResponseError(c, err)
 		return
 	}
 
 	accessToken, refreshToken, err := utils.GenerateTokens(user.ID, user.Role, "native")
 	if err != nil {
-		c.JSON(http.StatusInternalServerError, gin.H{"code": 0, "msg": err.Error()})
+		utils.ResponseError(c, err)
 		return
 	}
-
-	log.Println(data)
 
 	if err := h.IpGeoInfoRepo.Create(&models.IpGeoInfo{
 		IP:            data.IpGeoInfo.IP,
@@ -264,101 +256,99 @@ func (h *AuthHandler) Register(c *gin.Context) {
 		Continent:     data.IpGeoInfo.Continent,
 		UserId:        user.ID,
 	}); err != nil {
-		c.JSON(http.StatusInternalServerError, gin.H{"code": 0, "msg": err.Error()})
+		utils.ResponseError(c, err)
 		return
 	}
 
 	if err := h.Repo.UpdateRefreshToken(user.ID, &refreshToken); err != nil {
-		c.JSON(http.StatusInternalServerError, gin.H{"code": 0, "msg": err.Error()})
+		utils.ResponseError(c, err)
 		return
 	}
 
-	c.JSON(http.StatusOK, gin.H{"code": 1, "msg": "Success", "data": gin.H{
+	utils.ResponseSuccess(c, gin.H{
 		"access_token":  accessToken,
 		"refresh_token": refreshToken,
-	}})
+	}, nil, http.StatusCreated)
 }
 
 func (h *AuthHandler) Login(c *gin.Context) {
 	var user dtos.LoginDto
 	if err := c.ShouldBindJSON(&user); err != nil {
-		c.JSON(http.StatusBadRequest, gin.H{"code": 0, "msg": err.Error()})
+		utils.ResponseError(c, err, http.StatusBadRequest)
 		return
 	}
 
 	existingUser, err := h.UserRepo.FindByEmail(user.Email)
 	if err != nil {
 		if err == gorm.ErrRecordNotFound {
-			c.JSON(http.StatusNotFound, gin.H{"code": 0, "msg": "User not found!"})
+			utils.ResponseError(c, fmt.Errorf("user not found"), http.StatusNotFound)
 			return
 		}
 
-		c.JSON(http.StatusInternalServerError, gin.H{"code": 0, "msg": err.Error()})
+		utils.ResponseError(c, err)
 		return
 	}
 
 	if existingUser == nil {
-		c.JSON(http.StatusBadRequest, gin.H{"code": 0, "msg": "Email not found"})
+		utils.ResponseError(c, fmt.Errorf("email not found"), http.StatusBadRequest)
 		return
 	}
 
 	match, err := utils.VerifyPassword(user.Password, existingUser.Password)
 	if err != nil {
-		c.JSON(http.StatusBadRequest, gin.H{"code": 0, "msg": "Password is incorrect"})
+		utils.ResponseError(c, fmt.Errorf("password verification failed"), http.StatusBadRequest)
 		return
 	}
 
 	if !match {
-		c.JSON(http.StatusBadRequest, gin.H{"code": 0, "msg": "Password is incorrect"})
+		utils.ResponseError(c, fmt.Errorf("password is incorrect"), http.StatusBadRequest)
 		return
 	}
 
 	accessToken, refreshToken, err := utils.GenerateTokens(existingUser.ID, existingUser.Role, existingUser.Provider)
 	if err != nil {
-		c.JSON(http.StatusInternalServerError, gin.H{"code": 0, "msg": err.Error()})
+		utils.ResponseError(c, err)
 		return
 	}
 
-	err = h.Repo.UpdateRefreshToken(existingUser.ID, &refreshToken)
-	if err != nil {
-		c.JSON(http.StatusInternalServerError, gin.H{"code": 0, "msg": err.Error()})
+	if err := h.Repo.UpdateRefreshToken(existingUser.ID, &refreshToken); err != nil {
+		utils.ResponseError(c, err)
 		return
 	}
 
-	c.JSON(http.StatusOK, gin.H{"code": 1, "msg": "Success", "data": gin.H{
+	utils.ResponseSuccess(c, gin.H{
 		"access_token":  accessToken,
 		"refresh_token": refreshToken,
-	}})
+	}, nil)
 }
 
 func (h *AuthHandler) Logout(c *gin.Context) {
 	claims, ok := c.Get("user")
 	if !ok {
-		c.JSON(http.StatusUnauthorized, gin.H{"code": 0, "msg": "Unauthorized"})
+		utils.ResponseError(c, fmt.Errorf("unauthorized"), http.StatusUnauthorized)
 		return
 	}
 
 	userID := claims.(*utils.JWTClaims).Sub
 
-	err := h.Repo.UpdateRefreshToken(userID, nil)
-	if err != nil {
-		c.JSON(http.StatusInternalServerError, gin.H{"code": 0, "msg": err.Error()})
+	if err := h.Repo.UpdateRefreshToken(userID, nil); err != nil {
+		utils.ResponseError(c, err)
 		return
 	}
 
-	c.JSON(http.StatusOK, gin.H{"code": 1, "msg": "Success"})
+	utils.ResponseSuccess(c, nil, nil)
 }
 
 func (h *AuthHandler) RefreshToken(c *gin.Context) {
 	var refreshToken dtos.RefreshTokenDto
 	if err := c.ShouldBindJSON(&refreshToken); err != nil {
-		c.JSON(http.StatusBadRequest, gin.H{"code": 0, "msg": err.Error()})
+		utils.ResponseError(c, err, http.StatusBadRequest)
 		return
 	}
 
 	claims, ok := c.Get("user")
 	if !ok {
-		c.JSON(http.StatusUnauthorized, gin.H{"code": 0, "msg": "Unauthorized"})
+		utils.ResponseError(c, fmt.Errorf("unauthorized"), http.StatusUnauthorized)
 		return
 	}
 
@@ -367,39 +357,38 @@ func (h *AuthHandler) RefreshToken(c *gin.Context) {
 	hashedRefreshToken, err := config.RedisClient.Get(context.Background(), fmt.Sprintf("user:%s:refresh_token", user.Sub)).Result()
 	if err != nil {
 		if err == redis.Nil {
-			c.JSON(http.StatusBadRequest, gin.H{"code": 0, "msg": "User has logged out"})
+			utils.ResponseError(c, fmt.Errorf("user has logged out"), http.StatusBadRequest)
 			return
 		}
 
-		c.JSON(http.StatusInternalServerError, gin.H{"code": 0, "msg": err.Error()})
+		utils.ResponseError(c, err)
 		return
 	}
 
 	match, err := utils.VerifyPassword(refreshToken.RefreshToken, hashedRefreshToken)
 	if err != nil {
-		c.JSON(http.StatusBadRequest, gin.H{"code": 0, "msg": err.Error()})
+		utils.ResponseError(c, fmt.Errorf("password verification failed"), http.StatusBadRequest)
 		return
 	}
 
 	if !match {
-		c.JSON(http.StatusBadRequest, gin.H{"code": 0, "msg": "Refresh token is incorrect"})
+		utils.ResponseError(c, fmt.Errorf("refresh token is incorrect"), http.StatusBadRequest)
 		return
 	}
 
 	accessToken, newRefreshToken, err := utils.GenerateTokens(user.Sub, user.Role, user.Provider)
 	if err != nil {
-		c.JSON(http.StatusInternalServerError, gin.H{"code": 0, "msg": err.Error()})
+		utils.ResponseError(c, err)
 		return
 	}
 
-	err = h.Repo.UpdateRefreshToken(user.Sub, &newRefreshToken)
-	if err != nil {
-		c.JSON(http.StatusInternalServerError, gin.H{"code": 0, "msg": err.Error()})
+	if err := h.Repo.UpdateRefreshToken(user.Sub, &newRefreshToken); err != nil {
+		utils.ResponseError(c, err)
 		return
 	}
 
-	c.JSON(http.StatusOK, gin.H{"code": 1, "msg": "Success", "data": gin.H{
+	utils.ResponseSuccess(c, gin.H{
 		"access_token":  accessToken,
 		"refresh_token": newRefreshToken,
-	}})
+	}, nil)
 }

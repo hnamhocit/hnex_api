@@ -2,41 +2,31 @@ package handlers
 
 import (
 	"net/http"
-	"strconv"
 
 	"github.com/gin-gonic/gin"
-	"hnex.com/internal/models"
-	"hnex.com/internal/repositories"
+	"hnex.com/internal/services"
+	"hnex.com/internal/utils"
 )
 
 type ProductHandler struct {
-	Repo *repositories.ProductRepository
+	Service *services.ProductService
 }
 
 func (h *ProductHandler) FindMany(c *gin.Context) {
-	limitStr := c.DefaultQuery("limit", "10")
-	limit, err := strconv.Atoi(limitStr)
-	if err != nil || limit <= 0 {
-		c.JSON(http.StatusBadRequest, gin.H{"code": 0, "msg": "Invalid limit parameter"})
-		return
-	}
-
-	pageStr := c.DefaultQuery("page", "1")
-	page, err := strconv.Atoi(pageStr)
-	if err != nil || page <= 0 {
-		c.JSON(http.StatusBadRequest, gin.H{"code": 0, "msg": "Invalid page parameter"})
-		return
-	}
-
-	var products []*models.Product
-	count, err := h.Repo.FindMany(&products, limit, page)
+	limit, page, err := utils.GetPaginationCtx(c)
 	if err != nil {
-		c.JSON(http.StatusInternalServerError, gin.H{"code": 0, "msg": err.Error()})
+		utils.ResponseError(c, err, http.StatusBadRequest)
 		return
 	}
 
-	c.JSON(http.StatusCreated, gin.H{"code": 1, "msg": "Success", "data": gin.H{
+	count, products, err := h.Service.GetProductsWithPagination(limit, page)
+	if err != nil {
+		utils.ResponseError(c, err)
+		return
+	}
+
+	utils.ResponseSuccess(c, gin.H{
 		"items": products,
 		"count": count,
-	}})
+	}, nil)
 }

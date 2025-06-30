@@ -25,3 +25,7 @@ func (r *ProductRepository) FindMany(products *[]*models.Product, limit, page in
 
 	return totalCount, nil
 }
+
+func (r *ProductRepository) Create(product *models.Product) error {
+	return r.DB.Create(product).Error
+}

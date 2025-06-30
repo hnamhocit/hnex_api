@@ -2,41 +2,27 @@ package handlers
 
 import (
 	"net/http"
-	"strconv"
 
 	"github.com/gin-gonic/gin"
-	"hnex.com/internal/models"
-	"hnex.com/internal/repositories"
+	"hnex.com/internal/services"
+	"hnex.com/internal/utils"
 )
 
 type CourseHandler struct {
-	Repo *repositories.CourseRepository
+	Service *services.CourseService
 }
 
 func (h *CourseHandler) FindMany(c *gin.Context) {
-	limitStr := c.DefaultQuery("limit", "10")
-	limit, err := strconv.Atoi(limitStr)
-	if err != nil || limit <= 0 {
-		c.JSON(http.StatusBadRequest, gin.H{"code": 0, "msg": "Invalid limit parameter"})
-		return
-	}
-
-	pageStr := c.DefaultQuery("page", "1")
-	page, err := strconv.Atoi(pageStr)
-	if err != nil || page <= 0 {
-		c.JSON(http.StatusBadRequest, gin.H{"code": 0, "msg": "Invalid page parameter"})
-		return
-	}
-
-	var courses []*models.Course
-	count, err := h.Repo.FindMany(&courses, limit, page)
+	limit, page, err := utils.GetPaginationCtx(c)
 	if err != nil {
-		c.JSON(http.StatusInternalServerError, gin.H{"code": 0, "msg": err.Error()})
+		utils.ResponseError(c, err, http.StatusBadRequest)
 		return
 	}
 
-	c.JSON(http.StatusCreated, gin.H{"code": 1, "msg": "Success", "data": gin.H{
+	count, courses, err := h.Service.GetCoursesWithPagination(limit, page)
+
+	utils.ResponseSuccess(c, gin.H{
 		"items": courses,
 		"count": count,
-	}})
+	}, nil)
 }

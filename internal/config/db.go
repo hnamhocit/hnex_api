@@ -3,16 +3,13 @@ package config
 import (
 	"gorm.io/driver/postgres"
 	"gorm.io/gorm"
-	"gorm.io/gorm/logger"
 	"hnex.com/internal/models"
 )
 
 func ConnectDB(env *Env) (*gorm.DB, error) {
 	db, err := gorm.Open(postgres.Open(
 		env.DB_URL,
-	), &gorm.Config{
-		Logger: logger.Default.LogMode(logger.Info),
-	})
+	), &gorm.Config{})
 	if err != nil {
 		return nil, err
 	}

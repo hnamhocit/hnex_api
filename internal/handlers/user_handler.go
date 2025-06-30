@@ -1,7 +1,6 @@
 package handlers
 
 import (
-	"log"
 	"net/http"
 
 	"github.com/gin-gonic/gin"
@@ -17,17 +16,18 @@ type UserHandler struct {
 func (h *UserHandler) UpdateProfile(c *gin.Context) {
 	var payload dtos.UpdateProfileDTO
 	if err := c.ShouldBindJSON(&payload); err != nil {
-		c.JSON(http.StatusBadRequest, gin.H{"code": 0, "msg": err.Error()})
+		utils.ResponseError(c, err, http.StatusBadRequest)
 		return
 	}
 
 	user, err := utils.GetUserCtx(c)
 	if err != nil {
-		c.JSON(http.StatusNotFound, gin.H{"error": err.Error()})
+		utils.ResponseError(c, err, http.StatusNotFound)
 		return
 	}
 
 	if err := h.Repo.UpdateFieldsById(user.Sub, payload); err != nil {
+		utils.ResponseError(c, err, http.StatusNotFound)
 		c.JSON(http.StatusNotFound, gin.H{"error": err.Error()})
 		return
 	}
@@ -38,28 +38,17 @@ func (h *UserHandler) GetUser(c *gin.Context) {
 
 	user, err := h.Repo.FindById(id)
 	if err != nil {
-		c.JSON(http.StatusNotFound, gin.H{"error": err.Error()})
+		utils.ResponseError(c, err, http.StatusNotFound)
 		return
 	}
 
-	c.JSON(http.StatusOK, gin.H{
-		"code": 1,
-		"data": user,
-	})
+	utils.ResponseSuccess(c, user, nil)
 }
 
 func (h *UserHandler) GetProfile(c *gin.Context) {
-	user, ok := c.Get("user")
-	if !ok {
-		log.Println("User context not found")
-		c.JSON(http.StatusUnauthorized, gin.H{"code": 0, "msg": "User context not found"})
-		return
-	}
-
-	claims, ok := user.(*utils.JWTClaims)
-	if !ok {
-		log.Println("Convert user context to JWTClaims failed")
-		c.JSON(http.StatusUnauthorized, gin.H{"code": 0, "msg": "Convert user context to JWTClaims failed"})
+	claims, err := utils.GetUserCtx(c)
+	if err != nil {
+		utils.ResponseError(c, err)
 		return
 	}
 
@@ -69,8 +58,5 @@ func (h *UserHandler) GetProfile(c *gin.Context) {
 		return
 	}
 
-	c.JSON(http.StatusOK, gin.H{
-		"code": 1,
-		"data": user,
-	})
+	utils.ResponseSuccess(c, user, nil)
 }

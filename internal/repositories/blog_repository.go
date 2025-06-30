@@ -1,6 +1,8 @@
 package repositories
 
 import (
+	"strings"
+
 	"gorm.io/gorm"
 	"hnex.com/internal/models"
 )
@@ -30,10 +32,6 @@ func (r *BlogRepository) Create(blog *models.Blog) error {
 	return r.DB.Create(blog).Error
 }
 
-func (r *BlogRepository) UpdateThumbnailURL(id, thumbnailURL string) error {
-	return r.DB.Model(&models.Blog{}).Where("id = ?", id).Update("ThumbnailURL", thumbnailURL).Error
-}
-
 func (r *BlogRepository) FindOneBySlug(slug string) (*models.Blog, error) {
 	var blog models.Blog
 
@@ -49,4 +47,31 @@ func (r *BlogRepository) FindOneBySlug(slug string) (*models.Blog, error) {
 	}
 
 	return &blog, nil
+}
+
+// Search
+func (r *BlogRepository) FindAndCountByTitle(title string, limit, page int) (int64, []*models.Blog, error) {
+	var totalCount int64
+	var blogs []*models.Blog
+
+	if err := r.DB.Model(&models.Blog{}).
+		Where("LOWER(title) LIKE ?", "%"+strings.ToLower(title)+"%").
+		Count(&totalCount).Error; err != nil {
+		return 0, nil, err
+	}
+
+	offset := (page - 1) * limit
+	if offset < 0 {
+		offset = 0
+	}
+
+	if err := r.DB.
+		Where("LOWER(title) LIKE ?", "%"+strings.ToLower(title)+"%").
+		Limit(limit).
+		Offset(offset).
+		Find(&blogs).Error; err != nil {
+		return 0, nil, err
+	}
+
+	return totalCount, blogs, nil
 }
