@@ -9,9 +9,19 @@ import (
 	"hnex.com/internal/utils"
 )
 
+// Declaration
+
 type BlogHandler struct {
-	Service *services.BlogService
+	service *services.BlogService
 }
+
+func NewBlogHandler(service *services.BlogService) *BlogHandler {
+	return &BlogHandler{
+		service: service,
+	}
+}
+
+// Code
 
 func (h *BlogHandler) CreateBlog(c *gin.Context) {
 	var payload dtos.CreateBlogDTO
@@ -26,7 +36,7 @@ func (h *BlogHandler) CreateBlog(c *gin.Context) {
 		return
 	}
 
-	newBlog, err := h.Service.CreateBlogWithTransaction(
+	newBlog, err := h.service.CreateBlogWithTransaction(
 		payload.Title,
 		payload.Content,
 		user.Sub,
@@ -44,7 +54,7 @@ func (h *BlogHandler) GetBlogs(c *gin.Context) {
 		return
 	}
 
-	count, blogs, err := h.Service.GetBlogsWithPagination(limit, page)
+	count, blogs, err := h.service.GetBlogsWithPagination(limit, page)
 	if err != nil {
 		utils.ResponseError(c, err)
 		return
@@ -59,7 +69,7 @@ func (h *BlogHandler) GetBlogs(c *gin.Context) {
 func (h *BlogHandler) GetBlogBySlug(c *gin.Context) {
 	slug := c.Param("slug")
 
-	blog, err := h.Service.GetBlogDetails(slug)
+	blog, err := h.service.GetBlogDetails(slug)
 	if err != nil {
 		utils.ResponseError(c, err)
 		return

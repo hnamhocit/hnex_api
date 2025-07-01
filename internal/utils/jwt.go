@@ -11,14 +11,22 @@ import (
 	"hnex.com/internal/models"
 )
 
+type TokenParams struct {
+	Id          string
+	Role        models.Role
+	CountryCode string
+	Provider    string
+}
+
 type JWTClaims struct {
-	Sub      string      `json:"sub"`
-	Role     models.Role `json:"role"`
-	Provider string      `json:"provider"`
+	Sub         string      `json:"sub"`
+	Role        models.Role `json:"role"`
+	CountryCode string      `json:"country_code"`
+	Provider    string      `json:"provider"`
 	jwt.RegisteredClaims
 }
 
-func GenerateTokens(userID string, role models.Role, provider string) (accessToken, refreshToken string, err error) {
+func GenerateTokens(params *TokenParams) (accessToken, refreshToken string, err error) {
 
 	accessTokenSecret := []byte(os.Getenv("JWT_ACCESS_SECRET"))
 	refreshTokenSecret := []byte(os.Getenv("JWT_REFRESH_SECRET"))
@@ -34,15 +42,16 @@ func GenerateTokens(userID string, role models.Role, provider string) (accessTok
 	}
 
 	accessClaims := &JWTClaims{
-		Sub:      userID,
-		Role:     role,
-		Provider: provider,
+		Sub:         params.Id,
+		Role:        params.Role,
+		Provider:    params.Provider,
+		CountryCode: params.CountryCode,
 		RegisteredClaims: jwt.RegisteredClaims{
 			ExpiresAt: jwt.NewNumericDate(time.Now().Add(time.Duration(JWT_ACCESS_EXPIRES_IN) * time.Second)),
 			IssuedAt:  jwt.NewNumericDate(time.Now()),
 			NotBefore: jwt.NewNumericDate(time.Now()),
 			Issuer:    "hnex.api.com",
-			Audience:  []string{"access", provider},
+			Audience:  []string{"access", params.Provider},
 		},
 	}
 
@@ -52,14 +61,16 @@ func GenerateTokens(userID string, role models.Role, provider string) (accessTok
 	}
 
 	refreshClaims := &JWTClaims{
-		Sub:  userID,
-		Role: role,
+		Sub:         params.Id,
+		Role:        params.Role,
+		Provider:    params.Provider,
+		CountryCode: params.CountryCode,
 		RegisteredClaims: jwt.RegisteredClaims{
 			ExpiresAt: jwt.NewNumericDate(time.Now().Add(time.Duration(JWT_REFRESH_EXPIRES_IN) * time.Second)),
 			IssuedAt:  jwt.NewNumericDate(time.Now()),
 			NotBefore: jwt.NewNumericDate(time.Now()),
 			Issuer:    "hnex.api.com",
-			Audience:  []string{"refresh", provider},
+			Audience:  []string{"refresh", params.Provider},
 		},
 	}
 

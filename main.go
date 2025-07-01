@@ -4,7 +4,7 @@ import (
 	"log"
 	"os"
 
-	"hnex.com/internal/api"
+	"hnex.com/internal/app"
 	"hnex.com/internal/config"
 )
 
@@ -21,5 +21,5 @@ func main() {
 		log.Fatal("Error getting hostname: ", err)
 	}
 
-	api.Start(env, db, hostname)
+	app.Start(env, db, hostname)
 }

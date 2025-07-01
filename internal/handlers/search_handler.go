@@ -2,16 +2,25 @@ package handlers
 
 import (
 	"errors"
-	"log"
 
 	"github.com/gin-gonic/gin"
 	"hnex.com/internal/services"
 	"hnex.com/internal/utils"
 )
 
+// Declaration
+
 type SearchHandler struct {
-	Service *services.SearchService
+	service *services.SearchService
 }
+
+func NewSearchHandler(service *services.SearchService) *SearchHandler {
+	return &SearchHandler{
+		service: service,
+	}
+}
+
+// Code
 
 func (h *SearchHandler) SearchBlogs(c *gin.Context) {
 	query := c.Query("q")
@@ -26,9 +35,7 @@ func (h *SearchHandler) SearchBlogs(c *gin.Context) {
 		return
 	}
 
-	log.Printf("Search query: %s, Limit: %d, Page: %d", query, limit, page)
-
-	count, blogs, err := h.Service.GetBlogsWithPagination(query, limit, page)
+	count, blogs, err := h.service.GetBlogsWithPagination(query, limit, page)
 	if err != nil {
 		utils.ResponseError(c, err)
 		return
@@ -53,7 +60,7 @@ func (h *SearchHandler) SearchCourses(c *gin.Context) {
 		return
 	}
 
-	count, courses, err := h.Service.GetCoursesWithPagination(query, limit, page)
+	count, courses, err := h.service.GetCoursesWithPagination(query, limit, page)
 	if err != nil {
 		utils.ResponseError(c, err)
 		return

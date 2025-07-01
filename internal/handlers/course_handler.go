@@ -8,18 +8,28 @@ import (
 	"hnex.com/internal/utils"
 )
 
+// Declaration
+
 type CourseHandler struct {
-	Service *services.CourseService
+	service *services.CourseService
 }
 
-func (h *CourseHandler) FindMany(c *gin.Context) {
+func NewCourseHandler(service *services.CourseService) *CourseHandler {
+	return &CourseHandler{
+		service: service,
+	}
+}
+
+// Code
+
+func (h *CourseHandler) GetCourses(c *gin.Context) {
 	limit, page, err := utils.GetPaginationCtx(c)
 	if err != nil {
 		utils.ResponseError(c, err, http.StatusBadRequest)
 		return
 	}
 
-	count, courses, err := h.Service.GetCoursesWithPagination(limit, page)
+	count, courses, err := h.service.GetCoursesWithPagination(limit, page)
 
 	utils.ResponseSuccess(c, gin.H{
 		"items": courses,

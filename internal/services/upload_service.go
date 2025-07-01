@@ -2,15 +2,26 @@ package services
 
 import (
 	"mime/multipart"
+	"os"
 
 	"hnex.com/internal/models"
 	"hnex.com/internal/repositories"
 	"hnex.com/internal/utils"
 )
 
+// Declaration
+
 type UploadService struct {
-	Repo *repositories.UploadRepository
+	repo *repositories.UploadRepository
 }
+
+func NewUploadService(repo *repositories.UploadRepository) *UploadService {
+	return &UploadService{
+		repo: repo,
+	}
+}
+
+// Code
 
 func (s *UploadService) SaveAndCreateUpload(
 	file *multipart.FileHeader,
@@ -33,7 +44,7 @@ func (s *UploadService) SaveAndCreateUpload(
 		UploadableType: uploadableType,
 	}
 
-	if err := s.Repo.Create(&upload); err != nil {
+	if err := s.repo.Create(&upload); err != nil {
 		return nil, err
 	}
 
@@ -66,9 +77,27 @@ func (s *UploadService) SaveAndCreateUploads(
 
 		uploads = append(uploads, upload)
 	}
-	if err := s.Repo.CreateMany(uploads); err != nil {
+	if err := s.repo.CreateMany(uploads); err != nil {
 		return nil, err
 	}
 
 	return uploads, nil
+}
+
+func (s *UploadService) DeleteById(id string) error {
+	if err := s.repo.Delete(id); err != nil {
+		return err
+	}
+
+	return nil
+}
+
+func (s *UploadService) DeleteByPath(path string) error {
+	if err := s.repo.DeleteByPath(path); err != nil {
+		return err
+	}
+
+	os.Remove("./" + path)
+
+	return nil
 }

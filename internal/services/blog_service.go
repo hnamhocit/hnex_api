@@ -10,14 +10,25 @@ import (
 	"hnex.com/internal/utils"
 )
 
+// Declaration
+
 type BlogService struct {
-	Repo          *repositories.BlogRepository
-	UploadService *UploadService
+	repo          *repositories.BlogRepository
+	uploadService *UploadService
 }
+
+func NewBlogService(repo *repositories.BlogRepository, uploadService *UploadService) *BlogService {
+	return &BlogService{
+		repo:          repo,
+		uploadService: uploadService,
+	}
+}
+
+// Code
 
 func (s *BlogService) GetBlogsWithPagination(limit, page int) (int64, []*models.Blog, error) {
 	var blogs []*models.Blog
-	count, err := s.Repo.FindMany(&blogs, limit, page)
+	count, err := s.repo.FindMany(&blogs, limit, page)
 	if err != nil {
 		return 0, nil, err
 	}
@@ -34,7 +45,7 @@ func (s *BlogService) CreateBlogWithTransaction(title, content, authorId string,
 		AuthorId: authorId,
 	}
 
-	err := s.Repo.DB.Transaction(func(tx *gorm.DB) error {
+	err := s.repo.DB.Transaction(func(tx *gorm.DB) error {
 		if err := tx.Create(&newBlog).Error; err != nil {
 			return err
 		}
@@ -42,7 +53,7 @@ func (s *BlogService) CreateBlogWithTransaction(title, content, authorId string,
 		uploadableID := newBlog.ID
 		uploadableType := "Blogs"
 
-		upload, err := s.UploadService.SaveAndCreateUpload(
+		upload, err := s.uploadService.SaveAndCreateUpload(
 			thumbnail,
 			authorId,
 			&uploadableID,
@@ -60,7 +71,7 @@ func (s *BlogService) CreateBlogWithTransaction(title, content, authorId string,
 		}
 
 		if len(attachments) > 0 {
-			_, err := s.UploadService.SaveAndCreateUploads(
+			_, err := s.uploadService.SaveAndCreateUploads(
 				attachments,
 				authorId,
 				&uploadableID,
@@ -78,7 +89,7 @@ func (s *BlogService) CreateBlogWithTransaction(title, content, authorId string,
 }
 
 func (s *BlogService) GetBlogDetails(slug string) (*models.Blog, error) {
-	blog, err := s.Repo.FindOneBySlug(slug)
+	blog, err := s.repo.FindOneBySlug(slug)
 	if err != nil {
 		if err == gorm.ErrRecordNotFound {
 			return nil, errors.New("blog not found")

@@ -21,6 +21,10 @@ func (r *UploadRepository) Delete(id string) error {
 	return r.DB.Unscoped().Where("id = ?", id).Delete(&models.Upload{}).Error
 }
 
+func (r *UploadRepository) DeleteByPath(path string) error {
+	return r.DB.Unscoped().Where("path = ?", path).Delete(&models.Upload{}).Error
+}
+
 func (r *UploadRepository) FindOneByUserId(id string) (*models.Upload, error) {
 	var upload models.Upload
 

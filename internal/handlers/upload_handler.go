@@ -5,15 +5,23 @@ import (
 
 	"github.com/gin-gonic/gin"
 	dtos "hnex.com/internal/dtos/upload"
-	"hnex.com/internal/repositories"
 	"hnex.com/internal/services"
 	"hnex.com/internal/utils"
 )
 
+// Declaration
+
 type UploadHandler struct {
-	Service *services.UploadService
-	Repo    *repositories.UploadRepository
+	service *services.UploadService
 }
+
+func NewUploadHandler(service *services.UploadService) *UploadHandler {
+	return &UploadHandler{
+		service: service,
+	}
+}
+
+// Code
 
 func (h *UploadHandler) Upload(c *gin.Context) {
 	var payload dtos.UploadDTO
@@ -28,7 +36,7 @@ func (h *UploadHandler) Upload(c *gin.Context) {
 		return
 	}
 
-	upload, err := h.Service.SaveAndCreateUpload(
+	upload, err := h.service.SaveAndCreateUpload(
 		payload.File,
 		user.Sub,
 		payload.UploadableId,
@@ -39,7 +47,7 @@ func (h *UploadHandler) Upload(c *gin.Context) {
 		return
 	}
 
-	c.JSON(http.StatusCreated, gin.H{"code": 1, "msg": "Success", "data": upload})
+	utils.ResponseSuccess(c, upload, nil)
 }
 
 func (h *UploadHandler) Uploads(c *gin.Context) {
@@ -55,7 +63,7 @@ func (h *UploadHandler) Uploads(c *gin.Context) {
 		return
 	}
 
-	uploads, err := h.Service.SaveAndCreateUploads(
+	uploads, err := h.service.SaveAndCreateUploads(
 		payload.Files,
 		user.Sub,
 		payload.UploadableId,
@@ -68,9 +76,9 @@ func (h *UploadHandler) Uploads(c *gin.Context) {
 func (h *UploadHandler) Delete(c *gin.Context) {
 	id := c.Param("id")
 
-	err := h.Repo.Delete(id)
+	err := h.service.DeleteById(id)
 	if err != nil {
-		c.JSON(http.StatusInternalServerError, gin.H{"code": 0, "msg": err.Error()})
+		utils.ResponseError(c, err)
 		return
 	}
 

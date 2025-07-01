@@ -1,40 +1,36 @@
 package repositories
 
 import (
-	"context"
-	"fmt"
-
 	"gorm.io/gorm"
-	"hnex.com/internal/config"
 	"hnex.com/internal/models"
-	"hnex.com/internal/utils"
 )
 
 type AuthRepository struct {
 	DB *gorm.DB
 }
 
-func (r *AuthRepository) UpdateRefreshToken(id string, refreshToken *string) error {
-	var hashedRefreshToken *string
-
-	if refreshToken == nil {
-		config.RedisClient.Del(context.Background(), fmt.Sprintf("user:%s:refresh_token", id))
-
-		hashedRefreshToken = nil
-	} else {
-		hash, err := utils.HashPassword(*refreshToken)
-		if err != nil {
-			return err
-		}
-
-		config.RedisClient.Set(context.Background(), fmt.Sprintf("user:%s:refresh_token", id), hash, 0)
-
-		hashedRefreshToken = &hash
-	}
-
-	return r.DB.Model(&models.User{}).Where("id = ?", id).Update("refresh_token", hashedRefreshToken).Error
-}
-
 func (r *AuthRepository) CreateUser(user *models.User) error {
 	return r.DB.Create(user).Error
+}
+
+func (r *AuthRepository) WithTransaction(fn func(tx *gorm.DB) error) error {
+	tx := r.DB.Begin()
+	if tx.Error != nil {
+		return tx.Error
+	}
+
+	if err := fn(tx); err != nil {
+		tx.Rollback()
+		return err
+	}
+
+	return tx.Commit().Error
+}
+
+func (r *AuthRepository) UpdateFieldsById(id string, fields map[string]interface{}) error {
+	return r.DB.Model(&models.User{}).Where("id = ?", id).Updates(fields).Error
+}
+
+func (r *AuthRepository) UpdateFieldById(id string, field string, value interface{}) error {
+	return r.DB.Model(&models.User{}).Where("id = ?", id).Update(field, value).Error
 }
