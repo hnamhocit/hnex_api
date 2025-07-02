@@ -30,7 +30,7 @@ func ResponseError(c *gin.Context, err error, code ...int) {
 		responseCode = code[0]
 	}
 
-	c.JSON(responseCode, gin.H{
+	c.AbortWithStatusJSON(responseCode, gin.H{
 		"success": false,
 		"msg":     err.Error(),
 	})

@@ -29,6 +29,7 @@ func ConnectDB(env *Env) (*gorm.DB, error) {
 		&models.Tag{},
 		&models.Taggable{},
 		&models.IpGeoInfo{},
+		&models.Ban{},
 	)
 
 	return db, nil

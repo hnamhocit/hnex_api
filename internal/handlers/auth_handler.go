@@ -2,6 +2,7 @@ package handlers
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"net/http"
 	"strconv"
@@ -22,14 +23,16 @@ type AuthHandler struct {
 	userService      *services.UserService
 	ipGeoInfoService *services.IpGeoInfoService
 	mailService      *services.MailService
+	banService       *services.BanService
 }
 
-func NewAuthHandler(service *services.AuthService, userService *services.UserService, ipGeoInfoService *services.IpGeoInfoService, mailService *services.MailService) *AuthHandler {
+func NewAuthHandler(service *services.AuthService, userService *services.UserService, ipGeoInfoService *services.IpGeoInfoService, mailService *services.MailService, banService *services.BanService) *AuthHandler {
 	return &AuthHandler{
 		service:          service,
 		userService:      userService,
 		ipGeoInfoService: ipGeoInfoService,
 		mailService:      mailService,
+		banService:       banService,
 	}
 }
 
@@ -276,17 +279,6 @@ func (h *AuthHandler) Register(c *gin.Context) {
 		return
 	}
 
-	verificationCode, err := h.mailService.SendVerificationEmail(user.Email, user.DisplayName)
-	if err != nil {
-		utils.ResponseError(c, err)
-		return
-	}
-
-	if err := h.service.UpdateVerificationCode(user.ID, verificationCode); err != nil {
-		utils.ResponseError(c, err)
-		return
-	}
-
 	utils.ResponseSuccess(c, gin.H{
 		"access_token":  accessToken,
 		"refresh_token": refreshToken,
@@ -447,4 +439,74 @@ func (h *AuthHandler) RefreshToken(c *gin.Context) {
 		"access_token":  accessToken,
 		"refresh_token": newRefreshToken,
 	}, nil)
+}
+
+func (h *AuthHandler) SendVerificationCode(c *gin.Context) {
+	claims, err := utils.GetUserCtx(c)
+	if err != nil {
+		utils.ResponseError(c, err)
+		return
+	}
+
+	user, err := h.userService.FindOneById(claims.Sub)
+	if err != nil {
+		utils.ResponseError(c, err)
+		return
+	}
+
+	verificationCode, err := h.mailService.SendVerificationEmail(user.Email, user.DisplayName)
+	if err != nil {
+		utils.ResponseError(c, err)
+		return
+	}
+
+	if err := h.service.UpdateVerificationCode(user.ID, verificationCode); err != nil {
+		utils.ResponseError(c, err)
+		return
+	}
+
+	config.RedisClient.Set(context.Background(), fmt.Sprintf("users:%s:verification_code", claims.Sub), verificationCode, 1*time.Minute)
+
+	utils.ResponseSuccess(c, nil, nil)
+}
+
+func (h *AuthHandler) VerifyCode(c *gin.Context) {
+	code := c.Param("code")
+
+	claims, err := utils.GetUserCtx(c)
+	if err != nil {
+		utils.ResponseError(c, err)
+		return
+	}
+
+	attemptKey := fmt.Sprintf("users:%s:verify_attempt", claims.Sub)
+	attemptStr, _ := config.RedisClient.Get(context.Background(), attemptKey).Result()
+
+	attempt := 0
+	if attemptStr != "" {
+		attempt, _ = strconv.Atoi(attemptStr)
+	}
+
+	if attempt >= 3 {
+		h.banService.SetBannedUser(c.Request.Context(), claims.Sub, "Enter wrong verification code 3 times. Contact to email hnamhocit@gmail.com to confirm this is your email to unlock!", 0, true)
+		return
+	}
+
+	storedCode, err := config.RedisClient.Get(context.Background(), fmt.Sprintf("users:%s:verification_code", claims.Sub)).Result()
+	if err != nil {
+		utils.ResponseError(c, err)
+		return
+	}
+
+	if code != storedCode {
+		utils.ResponseError(c, errors.New("verification code is incorrect"))
+		return
+	}
+
+	if err := h.service.UpdateEmailVerified(claims.Sub); err != nil {
+		utils.ResponseError(c, err)
+		return
+	}
+
+	utils.ResponseSuccess(c, nil, nil)
 }

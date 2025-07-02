@@ -75,6 +75,10 @@ func (s *AuthService) Register(user *models.User, ipGeo *models.IpGeoInfo) error
 	})
 }
 
+func (s *AuthService) UpdateEmailVerified(id string) error {
+	return s.repo.UpdateFieldsById(id, map[string]interface{}{"verification_code": nil, "is_email_verified": true})
+}
+
 func (s *AuthService) UpdateVerificationCode(id string, verificationCode string) error {
 	return s.repo.UpdateFieldById(id, "verification_code", verificationCode)
 }

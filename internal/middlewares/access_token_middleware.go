@@ -1,26 +1,49 @@
 package middlewares
 
 import (
+	"errors"
 	"net/http"
 	"strings"
 
 	"github.com/gin-gonic/gin"
+	"hnex.com/internal/services"
 	"hnex.com/internal/utils"
 )
 
-func AccessTokenMiddleware(c *gin.Context) {
-	authorization := c.GetHeader("Authorization")
-	if authorization == "" {
-		c.JSON(http.StatusUnauthorized, gin.H{"code": 0, "msg": "Unauthorized"})
-		c.Abort()
-	}
+func AccessTokenMiddleware(banService *services.BanService) gin.HandlerFunc {
+	return func(c *gin.Context) {
+		authorization := c.GetHeader("Authorization")
+		if authorization == "" {
+			utils.ResponseError(c, errors.New("unauthorized"), http.StatusUnauthorized)
+			return
+		}
 
-	token := strings.Split(authorization, " ")[1]
-	claims, err := utils.VerifyToken(token, "JWT_ACCESS_SECRET")
-	if err != nil {
-		c.JSON(http.StatusUnauthorized, gin.H{"code": 0, "msg": err.Error()})
-		c.Abort()
-	}
+		if !strings.HasPrefix(authorization, "Bearer ") {
+			utils.ResponseError(c, errors.New("invalid header format"), http.StatusUnauthorized)
+			return
+		}
 
-	c.Set("user", claims)
+		token := strings.TrimPrefix(authorization, "Bearer ")
+		claims, err := utils.VerifyToken(token, "JWT_ACCESS_SECRET")
+		if err != nil {
+			utils.ResponseError(c, err, http.StatusUnauthorized)
+			return
+		}
+
+		ctx := c.Request.Context()
+		bannedUser, err := banService.GetBannedUser(ctx, claims.Sub)
+		if err != nil {
+			utils.ResponseError(c, err)
+			return
+		}
+
+		if bannedUser != nil {
+			utils.ResponseError(c, errors.New("account is banned"), http.StatusForbidden)
+			return
+		}
+
+		c.Set("user", claims)
+
+		c.Next()
+	}
 }
