@@ -12,7 +12,7 @@ import (
 	"github.com/redis/go-redis/v9"
 	"gorm.io/gorm"
 	"hnex.com/internal/config"
-	dtos "hnex.com/internal/dtos/auth"
+	"hnex.com/internal/dtos/auth"
 	"hnex.com/internal/models"
 	"hnex.com/internal/services"
 	"hnex.com/internal/utils"
@@ -216,7 +216,7 @@ func NewAuthHandler(service *services.AuthService, userService *services.UserSer
 // App Auth
 
 func (h *AuthHandler) Register(c *gin.Context) {
-	var data dtos.RegisterDto
+	var data auth.RegisterDTO
 	if err := c.ShouldBindJSON(&data); err != nil {
 		utils.ResponseError(c, err, http.StatusBadRequest)
 		return
@@ -289,8 +289,7 @@ const MaxLoginAttempt = 5
 const LoginAttemptTTL = 5 * time.Minute
 
 func (h *AuthHandler) Login(c *gin.Context) {
-
-	var payload dtos.LoginDto
+	var payload auth.LoginDTO
 	if err := c.ShouldBindJSON(&payload); err != nil {
 		utils.ResponseError(c, err, http.StatusBadRequest)
 		return
@@ -382,32 +381,25 @@ func (h *AuthHandler) Logout(c *gin.Context) {
 }
 
 func (h *AuthHandler) RefreshToken(c *gin.Context) {
-	var refreshToken dtos.RefreshTokenDto
+	var refreshToken auth.RefreshTokenDTO
 	if err := c.ShouldBindJSON(&refreshToken); err != nil {
 		utils.ResponseError(c, err, http.StatusBadRequest)
 		return
 	}
 
-	claims, ok := c.Get("user")
-	if !ok {
-		utils.ResponseError(c, fmt.Errorf("unauthorized"), http.StatusUnauthorized)
+	claims, err := utils.GetClaimsCtx(c)
+	if err != nil {
+		utils.ResponseError(c, err, http.StatusBadRequest)
 		return
 	}
 
-	user := claims.(*utils.JWTClaims)
-
-	hashedRefreshToken, err := config.RedisClient.Get(context.Background(), fmt.Sprintf("user:%s:refresh_token", user.Sub)).Result()
+	hashedRefreshToken, err := h.service.GetRefreshToken(c.Request.Context(), claims.Sub)
 	if err != nil {
-		if err == redis.Nil {
-			utils.ResponseError(c, fmt.Errorf("user has logged out"), http.StatusBadRequest)
-			return
-		}
-
 		utils.ResponseError(c, err)
 		return
 	}
 
-	match, err := utils.VerifyPassword(refreshToken.RefreshToken, hashedRefreshToken)
+	match, err := utils.VerifyPassword(refreshToken.RefreshToken, *hashedRefreshToken)
 	if err != nil {
 		utils.ResponseError(c, fmt.Errorf("password verification failed"), http.StatusBadRequest)
 		return
@@ -420,17 +412,17 @@ func (h *AuthHandler) RefreshToken(c *gin.Context) {
 
 	accessToken, newRefreshToken, err := utils.GenerateTokens(
 		&utils.TokenParams{
-			Id:          user.ID,
-			Role:        user.Role,
-			Provider:    user.Provider,
-			CountryCode: user.CountryCode,
+			Id:          claims.Sub,
+			Role:        claims.Role,
+			Provider:    claims.Provider,
+			CountryCode: claims.CountryCode,
 		})
 	if err != nil {
 		utils.ResponseError(c, err)
 		return
 	}
 
-	if err := h.service.UpdateRefreshToken(user.Sub, &newRefreshToken); err != nil {
+	if err := h.service.UpdateRefreshToken(claims.Sub, &newRefreshToken); err != nil {
 		utils.ResponseError(c, err)
 		return
 	}
@@ -441,10 +433,27 @@ func (h *AuthHandler) RefreshToken(c *gin.Context) {
 	}, nil)
 }
 
-func (h *AuthHandler) SendVerificationCode(c *gin.Context) {
-	claims, err := utils.GetUserCtx(c)
+func (h *AuthHandler) SendCode(c *gin.Context) {
+	claims, err := utils.GetClaimsCtx(c)
 	if err != nil {
-		utils.ResponseError(c, err)
+		utils.ResponseError(c, err, http.StatusUnauthorized)
+		return
+	}
+
+	ctx := c.Request.Context()
+
+	cooldownKey := fmt.Sprintf("users:%s:send_code_cooldown", claims.Sub)
+	cooldownDuration := 1 * time.Minute
+
+	exists, err := config.RedisClient.Exists(ctx, cooldownKey).Result()
+	if err != nil {
+		utils.ResponseError(c, fmt.Errorf("failed to check cooldown status: %w", err), http.StatusInternalServerError)
+		return
+	}
+
+	if exists > 0 {
+		remainingTTL := config.RedisClient.TTL(ctx, cooldownKey).Val()
+		utils.ResponseError(c, fmt.Errorf("Please wait %d seconds before sending another code.", int(remainingTTL.Seconds())), http.StatusTooManyRequests)
 		return
 	}
 
@@ -465,47 +474,95 @@ func (h *AuthHandler) SendVerificationCode(c *gin.Context) {
 		return
 	}
 
-	config.RedisClient.Set(context.Background(), fmt.Sprintf("users:%s:verification_code", claims.Sub), verificationCode, 1*time.Minute)
+	verificationCodeKey := fmt.Sprintf("users:%s:verification_code", claims.Sub)
+	config.RedisClient.Set(ctx, verificationCodeKey, verificationCode, 5*time.Minute)
+
+	if err := config.RedisClient.Set(ctx, cooldownKey, "1", cooldownDuration).Err(); err != nil {
+		fmt.Printf("Warning: Failed to set cooldown key in Redis for user %s: %v\n", claims.Sub, err)
+	}
 
 	utils.ResponseSuccess(c, nil, nil)
 }
 
 func (h *AuthHandler) VerifyCode(c *gin.Context) {
-	code := c.Param("code")
-
-	claims, err := utils.GetUserCtx(c)
-	if err != nil {
-		utils.ResponseError(c, err)
+	var payload auth.VerifyCodeDTO
+	if err := c.ShouldBindJSON(&payload); err != nil {
+		utils.ResponseError(c, err, http.StatusBadRequest)
 		return
 	}
+
+	claims, err := utils.GetClaimsCtx(c)
+	if err != nil {
+		utils.ResponseError(c, err, http.StatusUnauthorized)
+		return
+	}
+
+	ctx := c.Request.Context()
 
 	attemptKey := fmt.Sprintf("users:%s:verify_attempt", claims.Sub)
-	attemptStr, _ := config.RedisClient.Get(context.Background(), attemptKey).Result()
+	maxAttempts := 3
 
-	attempt := 0
-	if attemptStr != "" {
-		attempt, _ = strconv.Atoi(attemptStr)
-	}
-
-	if attempt >= 3 {
-		h.banService.SetBannedUser(c.Request.Context(), claims.Sub, "Enter wrong verification code 3 times. Contact to email hnamhocit@gmail.com to confirm this is your email to unlock!", 0, true)
+	currentAttempts, err := config.RedisClient.Get(ctx, attemptKey).Int()
+	if err == redis.Nil {
+		currentAttempts = 0
+	} else if err != nil {
+		utils.ResponseError(c, fmt.Errorf("failed to retrieve verification attempt count from Redis: %w", err), http.StatusInternalServerError)
 		return
 	}
 
-	storedCode, err := config.RedisClient.Get(context.Background(), fmt.Sprintf("users:%s:verification_code", claims.Sub)).Result()
+	if currentAttempts >= maxAttempts {
+		banReason := "Entered wrong verification code 3 times."
+		contactInfo := "Contact to email hnamhocit@gmail.com to confirm this is your email to unlock!"
+		h.banService.SetBan(ctx, claims.Sub, banReason+" "+contactInfo, 0, true)
+		utils.ResponseError(c, errors.New(banReason+" "+contactInfo), http.StatusForbidden)
+		return
+	}
+
+	verificationCode, err := h.service.GetVerificationCode(ctx, claims.Sub)
 	if err != nil {
-		utils.ResponseError(c, err)
+		utils.ResponseError(c, err, http.StatusInternalServerError)
 		return
 	}
 
-	if code != storedCode {
-		utils.ResponseError(c, errors.New("verification code is incorrect"))
+	if verificationCode == nil {
+		_, incrErr := config.RedisClient.Incr(ctx, attemptKey).Result()
+		if incrErr != nil {
+			fmt.Printf("Warning: Failed to increment attempt count for user %s: %v\n", claims.Sub, incrErr)
+		}
+
+		utils.ResponseError(c, errors.New("Verification code is expired or invalid. Please request a new one."), http.StatusBadRequest)
+		return
+	}
+
+	if payload.Code != *verificationCode {
+		newAttempts, incrErr := config.RedisClient.Incr(ctx, attemptKey).Result()
+		if incrErr != nil {
+			fmt.Printf("Warning: Failed to increment attempt count for user %s: %v\n", claims.Sub, incrErr)
+		}
+
+		if int(newAttempts) >= maxAttempts {
+			banReason := "Entered wrong verification code 3 times."
+			contactInfo := "Contact to email hnamhocit@gmail.com to confirm this is your email to unlock!"
+			h.banService.SetBan(ctx, claims.Sub, banReason+" "+contactInfo, 0, true) // Ban permanently (TTL 0)
+			utils.ResponseError(c, errors.New(banReason+" "+contactInfo), http.StatusForbidden)
+		} else {
+			utils.ResponseError(c, fmt.Errorf("Verification code is incorrect. You have %d attempts left.", maxAttempts-int(newAttempts)), http.StatusBadRequest)
+		}
 		return
 	}
 
 	if err := h.service.UpdateEmailVerified(claims.Sub); err != nil {
-		utils.ResponseError(c, err)
+		utils.ResponseError(c, err, http.StatusInternalServerError)
 		return
+	}
+
+	verificationCodeKey := fmt.Sprintf("users:%s:verification_code", claims.Sub)
+	if err := config.RedisClient.Del(ctx, verificationCodeKey).Err(); err != nil {
+		fmt.Printf("Warning: Failed to delete used verification code from Redis for user %s: %v\n", claims.Sub, err)
+	}
+
+	if err := config.RedisClient.Del(ctx, attemptKey).Err(); err != nil {
+		fmt.Printf("Warning: Failed to delete verification attempt key for user %s: %v\n", claims.Sub, err)
 	}
 
 	utils.ResponseSuccess(c, nil, nil)

@@ -4,7 +4,7 @@ import (
 	"net/http"
 
 	"github.com/gin-gonic/gin"
-	dtos "hnex.com/internal/dtos/user"
+	"hnex.com/internal/dtos/user"
 	"hnex.com/internal/services"
 	"hnex.com/internal/utils"
 )
@@ -38,19 +38,19 @@ func (h *UserHandler) GetUser(c *gin.Context) {
 // Profile
 
 func (h *UserHandler) UpdateProfile(c *gin.Context) {
-	var payload dtos.UpdateProfileDTO
+	var payload user.UpdateProfileDTO
 	if err := c.ShouldBindJSON(&payload); err != nil {
 		utils.ResponseError(c, err, http.StatusBadRequest)
 		return
 	}
 
-	user, err := utils.GetUserCtx(c)
+	claims, err := utils.GetClaimsCtx(c)
 	if err != nil {
 		utils.ResponseError(c, err, http.StatusNotFound)
 		return
 	}
 
-	if err := h.service.UpdateProfile(user.Sub, payload); err != nil {
+	if err := h.service.UpdateProfile(claims.Sub, payload); err != nil {
 		utils.ResponseError(c, err)
 		return
 	}
@@ -59,13 +59,13 @@ func (h *UserHandler) UpdateProfile(c *gin.Context) {
 }
 
 func (h *UserHandler) UpdateProfileImage(c *gin.Context) {
-	var payload dtos.UpdateProfileImageDTO
+	var payload user.UpdateProfileImageDTO
 	if err := c.ShouldBind(&payload); err != nil {
 		utils.ResponseError(c, err, http.StatusBadRequest)
 		return
 	}
 
-	claims, err := utils.GetUserCtx(c)
+	claims, err := utils.GetClaimsCtx(c)
 	if err != nil {
 		utils.ResponseError(c, err, http.StatusNotFound)
 		return
@@ -80,7 +80,7 @@ func (h *UserHandler) UpdateProfileImage(c *gin.Context) {
 }
 
 func (h *UserHandler) GetProfile(c *gin.Context) {
-	claims, err := utils.GetUserCtx(c)
+	claims, err := utils.GetClaimsCtx(c)
 	if err != nil {
 		utils.ResponseError(c, err)
 		return

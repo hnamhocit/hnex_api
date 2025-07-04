@@ -2,6 +2,7 @@ package services
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"log"
 	"time"
@@ -9,6 +10,7 @@ import (
 	"hnex.com/internal/config"
 	"hnex.com/internal/models"
 	"hnex.com/internal/repositories"
+	"hnex.com/internal/utils"
 )
 
 // Declaration
@@ -30,88 +32,82 @@ func (s *BanService) getKey(id string) string {
 // Code
 
 type BannedUser struct {
-	Reason      string `json:"reason"`
-	ExpiresAt   int64  `json:"expires_at"`
-	CreatedAt   int64  `json:"banned_at"`
-	IsPermanent bool   `json:"is_permanent,omitempty"`
+	Reason      string `json:"reason" redis:"reason"`
+	ExpiresAt   int64  `json:"expires_at" redis:"expires_at"`
+	CreatedAt   int64  `json:"created_at" redis:"created_at"`
+	IsPermanent bool   `json:"is_permanent" redis:"is_permanent"`
 }
 
-func (s *BanService) GetBannedUser(ctx context.Context, userId string) (*BannedUser, error) {
+func (s *BanService) Getban(ctx context.Context, userId string) (*BannedUser, error) {
 	var bannedUser BannedUser
 	redisKey := s.getKey(userId)
 	now := time.Now()
 
-	// Get from Redis
+	// 1. Check Redis
 	data := config.RedisClient.HGetAll(ctx, redisKey)
 	if data.Err() == nil && len(data.Val()) > 0 {
-		if err := data.Scan(&bannedUser); err != nil {
-			log.Printf("Fail to scan Redis ban data: %v", err)
-		} else if bannedUser.CreatedAt > 0 {
+		if err := data.Scan(&bannedUser); err == nil {
 			if bannedUser.IsPermanent {
 				return &bannedUser, nil
 			}
 
 			if bannedUser.ExpiresAt > 0 && time.Unix(bannedUser.ExpiresAt, 0).Before(now) {
-				go func() {
-					if err := config.RedisClient.Del(ctx, redisKey).Err(); err != nil {
-						log.Printf("Failed to delete Redis ban: %v", err)
-					}
-
-					if err := s.repo.DeleteByUserId(userId); err != nil {
-						log.Printf("Failed to delete DB ban: %v", err)
-					}
-				}()
-
+				config.RedisClient.Del(ctx, redisKey) // sync
+				go s.repo.DeleteByUserId(userId)
 				return nil, nil
 			}
 
 			return &bannedUser, nil
 		}
+		log.Printf("Fail to scan Redis ban data: %v", data.Err())
 	}
 
-	// Fallback to DB
+	// 2. Fallback to DB
 	ban, err := s.repo.FindOneByUserId(userId)
-	if err != nil {
+	if err != nil || ban == nil {
 		return nil, err
 	}
 
 	bannedUser = BannedUser{
 		Reason:      ban.Reason,
-		ExpiresAt:   ban.ExpiresAt.Unix(),
+		ExpiresAt:   ban.ExpiresAt,
 		CreatedAt:   ban.CreatedAt.Unix(),
 		IsPermanent: ban.IsPermanent,
 	}
 
-	// Save to Redis
-	go func() {
-		if err := config.RedisClient.HSet(ctx, redisKey, bannedUser).Err(); err != nil {
-			log.Printf("Failed to cache ban in Redis: %v", err)
-		}
-	}()
-
-	// Expired check
 	if !bannedUser.IsPermanent && bannedUser.ExpiresAt > 0 && time.Unix(bannedUser.ExpiresAt, 0).Before(now) {
+		go s.repo.DeleteByUserId(userId)
+		return nil, nil
+	}
+
+	// Cache lại Redis
+	hash, err := utils.ToRedisHash(bannedUser)
+	if err == nil {
 		go func() {
-			if err := s.repo.DeleteByUserId(userId); err != nil {
-				log.Printf("Failed to delete expired ban: %v", err)
+			if err := config.RedisClient.HSet(ctx, redisKey, hash).Err(); err != nil {
+				log.Printf("Failed to cache ban in Redis: %v", err)
+			}
+
+			if !bannedUser.IsPermanent {
+				ttl := time.Until(time.Unix(bannedUser.ExpiresAt, 0))
+				config.RedisClient.Expire(ctx, redisKey, ttl)
 			}
 		}()
-
-		return nil, nil
 	}
 
 	return &bannedUser, nil
 }
 
-func (s *BanService) SetBannedUser(ctx context.Context, userId, reason string, duration time.Duration, isPermanent bool) error {
-	var dbExpiresAt *time.Time
+func (s *BanService) SetBan(ctx context.Context, userId, reason string, duration time.Duration, isPermanent bool) error {
 	var expiresAt int64
 	var redisTTL time.Duration
+	now := time.Now()
 
 	if !isPermanent {
-		expTime := time.Now().Add(duration)
-		dbExpiresAt = &expTime
-		expiresAt = expTime.Unix()
+		if duration <= 0 {
+			return errors.New("ban duration must be > 0 for temporary bans")
+		}
+		expiresAt = now.Add(duration).Unix()
 		redisTTL = duration
 	}
 
@@ -119,7 +115,7 @@ func (s *BanService) SetBannedUser(ctx context.Context, userId, reason string, d
 	bannedUser := models.Ban{
 		UserId:      userId,
 		Reason:      reason,
-		ExpiresAt:   dbExpiresAt,
+		ExpiresAt:   expiresAt,
 		IsPermanent: isPermanent,
 	}
 	if err := s.repo.Create(&bannedUser); err != nil {
@@ -130,30 +126,33 @@ func (s *BanService) SetBannedUser(ctx context.Context, userId, reason string, d
 	redisBannedUser := BannedUser{
 		Reason:      reason,
 		ExpiresAt:   expiresAt,
-		CreatedAt:   time.Now().Unix(),
+		CreatedAt:   now.Unix(),
 		IsPermanent: isPermanent,
 	}
 
 	key := s.getKey(userId)
 	pipe := config.RedisClient.Pipeline()
-	pipe.HSet(ctx, key, redisBannedUser)
 
+	hash, err := utils.ToRedisHash(redisBannedUser)
+	if err != nil {
+		return err
+	}
+
+	pipe.HSet(ctx, key, hash)
 	if redisTTL > 0 {
 		pipe.Expire(ctx, key, redisTTL)
 	} else {
 		pipe.Persist(ctx, key)
 	}
 
-	if _, err := pipe.Exec(ctx); err != nil {
-		return err
-	}
-
-	return nil
+	_, err = pipe.Exec(ctx)
+	return err
 }
 
-func (s *BanService) RemoveBannedUser(ctx context.Context, userId string) error {
+func (s *BanService) RemoveBan(ctx context.Context, userId string) error {
 	if err := s.repo.DeleteById(userId); err != nil {
 		return err
 	}
+
 	return config.RedisClient.Del(ctx, s.getKey(userId)).Err()
 }

@@ -1,4 +1,4 @@
-package dtos
+package auth
 
 type GoogleAuthRequest struct {
 	IDToken string `json:"id_token"`

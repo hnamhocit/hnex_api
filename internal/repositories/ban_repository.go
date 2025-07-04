@@ -1,6 +1,8 @@
 package repositories
 
 import (
+	"errors"
+
 	"gorm.io/gorm"
 	"hnex.com/internal/models"
 )
@@ -12,6 +14,10 @@ type BanRepository struct {
 func (r *BanRepository) FindOneByUserId(id string) (*models.Ban, error) {
 	var ban models.Ban
 	if err := r.DB.First(&ban, "user_id = ?", id).Error; err != nil {
+		if errors.Is(err, gorm.ErrRecordNotFound) {
+			return nil, nil
+		}
+
 		return nil, err
 	}
 

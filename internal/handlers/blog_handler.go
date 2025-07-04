@@ -4,7 +4,7 @@ import (
 	"net/http"
 
 	"github.com/gin-gonic/gin"
-	dtos "hnex.com/internal/dtos/blog"
+	"hnex.com/internal/dtos/blog"
 	"hnex.com/internal/services"
 	"hnex.com/internal/utils"
 )
@@ -24,13 +24,13 @@ func NewBlogHandler(service *services.BlogService) *BlogHandler {
 // Code
 
 func (h *BlogHandler) CreateBlog(c *gin.Context) {
-	var payload dtos.CreateBlogDTO
+	var payload blog.CreateBlogDTO
 	if err := c.ShouldBind(&payload); err != nil {
 		utils.ResponseError(c, err, http.StatusBadRequest)
 		return
 	}
 
-	user, err := utils.GetUserCtx(c)
+	claims, err := utils.GetClaimsCtx(c)
 	if err != nil {
 		utils.ResponseError(c, err)
 		return
@@ -39,7 +39,7 @@ func (h *BlogHandler) CreateBlog(c *gin.Context) {
 	newBlog, err := h.service.CreateBlogWithTransaction(
 		payload.Title,
 		payload.Content,
-		user.Sub,
+		claims.Sub,
 		payload.Thumbnail,
 		payload.Attachments,
 	)

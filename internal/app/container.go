@@ -4,6 +4,7 @@ import (
 	"github.com/gin-gonic/gin"
 	"gorm.io/gorm"
 	"hnex.com/internal/config"
+	"hnex.com/internal/handlers"
 	"hnex.com/internal/repositories"
 	"hnex.com/internal/services"
 )
@@ -35,8 +36,9 @@ type AppContainer struct {
 	BanService       *services.BanService
 
 	// Handlers
-	Handlers *Handlers
+	Handlers *handlers.Handlers
 
 	// Middleware
 	AccessTokenMiddleware gin.HandlerFunc
+	BanMiddleware         gin.HandlerFunc
 }

@@ -4,7 +4,7 @@ import (
 	"net/http"
 
 	"github.com/gin-gonic/gin"
-	dtos "hnex.com/internal/dtos/upload"
+	"hnex.com/internal/dtos/upload"
 	"hnex.com/internal/services"
 	"hnex.com/internal/utils"
 )
@@ -24,13 +24,13 @@ func NewUploadHandler(service *services.UploadService) *UploadHandler {
 // Code
 
 func (h *UploadHandler) Upload(c *gin.Context) {
-	var payload dtos.UploadDTO
+	var payload upload.UploadDTO
 	if err := c.ShouldBind(&payload); err != nil {
 		utils.ResponseError(c, err, http.StatusBadRequest)
 		return
 	}
 
-	user, err := utils.GetUserCtx(c)
+	user, err := utils.GetClaimsCtx(c)
 	if err != nil {
 		utils.ResponseError(c, err)
 		return
@@ -51,13 +51,13 @@ func (h *UploadHandler) Upload(c *gin.Context) {
 }
 
 func (h *UploadHandler) Uploads(c *gin.Context) {
-	var payload dtos.UploadsDTO
+	var payload upload.UploadsDTO
 	if err := c.ShouldBind(&payload); err != nil {
 		utils.ResponseError(c, err)
 		return
 	}
 
-	user, err := utils.GetUserCtx(c)
+	user, err := utils.GetClaimsCtx(c)
 	if err != nil {
 		utils.ResponseError(c, err)
 		return

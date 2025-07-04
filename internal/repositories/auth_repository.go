@@ -13,6 +13,24 @@ func (r *AuthRepository) CreateUser(user *models.User) error {
 	return r.DB.Create(user).Error
 }
 
+func (r *AuthRepository) GetVerficationCode(id string) (*string, error) {
+	var user models.User
+	if err := r.DB.Select("verification_code").Where("id = ?", id).First(&user).Error; err != nil {
+		return nil, err
+	}
+
+	return user.VerificationCode, nil
+}
+
+func (r *AuthRepository) GetRefreshToken(id string) (*string, error) {
+	var user models.User
+	if err := r.DB.Select("refresh_token").Where("id = ?", id).First(&user).Error; err != nil {
+		return nil, err
+	}
+
+	return user.RefreshToken, nil
+}
+
 func (r *AuthRepository) WithTransaction(fn func(tx *gorm.DB) error) error {
 	tx := r.DB.Begin()
 	if tx.Error != nil {

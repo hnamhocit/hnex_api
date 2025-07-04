@@ -2,9 +2,12 @@ package services
 
 import (
 	"context"
+	"errors"
 	"fmt"
+	"log"
 	"time"
 
+	"github.com/redis/go-redis/v9"
 	"gorm.io/gorm"
 	"hnex.com/internal/config"
 	"hnex.com/internal/models"
@@ -73,6 +76,50 @@ func (s *AuthService) Register(user *models.User, ipGeo *models.IpGeoInfo) error
 
 		return nil
 	})
+}
+
+func (s *AuthService) GetRefreshToken(ctx context.Context, userId string) (*string, error) {
+	redisRefreshToken, err := config.RedisClient.Get(context.Background(), fmt.Sprintf("user:%s:refresh_token", userId)).Result()
+	if err != nil && !errors.Is(err, redis.Nil) {
+		log.Printf("get redis refresh token failed: %v", err)
+	}
+
+	if len(redisRefreshToken) > 0 {
+		return &redisRefreshToken, nil
+	}
+
+	refreshToken, err := s.repo.GetRefreshToken(userId)
+	if err != nil {
+		if errors.Is(err, gorm.ErrRecordNotFound) {
+			return nil, nil
+		}
+
+		return nil, err
+	}
+
+	return refreshToken, nil
+}
+
+func (s *AuthService) GetVerificationCode(ctx context.Context, userId string) (*string, error) {
+	redisCode, err := config.RedisClient.Get(ctx, fmt.Sprintf("users:%s:verification_code", userId)).Result()
+	if err != nil && !errors.Is(err, redis.Nil) {
+		log.Printf("get redis code failed: %v", err)
+	}
+
+	if len(redisCode) > 0 {
+		return &redisCode, nil
+	}
+
+	verificationCode, err := s.repo.GetVerficationCode(userId)
+	if err != nil {
+		if errors.Is(err, gorm.ErrRecordNotFound) {
+			return nil, nil
+		}
+
+		return nil, err
+	}
+
+	return verificationCode, nil
 }
 
 func (s *AuthService) UpdateEmailVerified(id string) error {

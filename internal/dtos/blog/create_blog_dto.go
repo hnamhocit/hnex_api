@@ -1,4 +1,4 @@
-package dtos
+package blog
 
 import "mime/multipart"
 

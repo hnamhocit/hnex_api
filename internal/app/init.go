@@ -2,14 +2,13 @@ package app
 
 import (
 	"gorm.io/gorm"
-	"hnex.com/internal/config"
 	"hnex.com/internal/handlers"
 	"hnex.com/internal/middlewares"
 	"hnex.com/internal/repositories"
 	"hnex.com/internal/services"
 )
 
-func InitApp(env *config.Env, db *gorm.DB) *AppContainer {
+func Init(db *gorm.DB) *AppContainer {
 	// Repositories
 	userRepo := &repositories.UserRepository{DB: db}
 	authRepo := &repositories.AuthRepository{DB: db}
@@ -32,11 +31,8 @@ func InitApp(env *config.Env, db *gorm.DB) *AppContainer {
 	mailService := services.NewMailService(db)
 	banService := services.NewBanService(banRepo)
 
-	// Middleware
-	accessTokenMiddleware := middlewares.AccessTokenMiddleware(banService)
-
 	// Handlers
-	handlers := &Handlers{
+	handlers := &handlers.Handlers{
 		AuthHandler:    handlers.NewAuthHandler(authService, userService, ipGeoInfoService, mailService, banService),
 		UserHandler:    handlers.NewUserHandler(userService),
 		UploadHandler:  handlers.NewUploadHandler(uploadService),
@@ -44,11 +40,13 @@ func InitApp(env *config.Env, db *gorm.DB) *AppContainer {
 		BlogHandler:    handlers.NewBlogHandler(blogService),
 		CourseHandler:  handlers.NewCourseHandler(courseService),
 		ProductHandler: handlers.NewProductHandler(productService),
+		BanHandler:     handlers.NewBanHandler(banService),
 	}
 
+	// Middlewares
+	banMiddleware := middlewares.BanMiddleware(banService)
+
 	return &AppContainer{
-		DB:  db,
-		Env: env,
 
 		// Repos
 		UserRepo:      userRepo,
@@ -72,8 +70,8 @@ func InitApp(env *config.Env, db *gorm.DB) *AppContainer {
 		MailService:      mailService,
 		BanService:       banService,
 
-		// Middleware + Handlers
-		AccessTokenMiddleware: accessTokenMiddleware,
 		Handlers:              handlers,
+		AccessTokenMiddleware: middlewares.AccessTokenMiddleware,
+		BanMiddleware:         banMiddleware,
 	}
 }

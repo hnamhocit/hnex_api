@@ -1,4 +1,4 @@
-package dtos
+package auth
 
 type FacebookAuthRequest struct {
 	AccessToken string `json:"accessToken" binding:"required"`

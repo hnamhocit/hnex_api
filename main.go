@@ -2,7 +2,6 @@ package main
 
 import (
 	"log"
-	"os"
 
 	"hnex.com/internal/app"
 	"hnex.com/internal/config"
@@ -16,10 +15,5 @@ func main() {
 		log.Fatal(err.Error())
 	}
 
-	hostname, err := os.Hostname()
-	if err != nil {
-		log.Fatal("Error getting hostname: ", err)
-	}
-
-	app.Start(env, db, hostname)
+	app.Start(db, env.PORT)
 }

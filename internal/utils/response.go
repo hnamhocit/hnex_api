@@ -19,7 +19,7 @@ func ResponseSuccess(c *gin.Context, data interface{}, msg *string, code ...int)
 
 	c.JSON(responseCode, gin.H{
 		"success": true,
-		"msg":     responseMsg,
+		"message": responseMsg,
 		"data":    data,
 	})
 }
@@ -32,6 +32,6 @@ func ResponseError(c *gin.Context, err error, code ...int) {
 
 	c.AbortWithStatusJSON(responseCode, gin.H{
 		"success": false,
-		"msg":     err.Error(),
+		"message": err.Error(),
 	})
 }
