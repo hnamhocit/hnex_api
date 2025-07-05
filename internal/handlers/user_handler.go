@@ -1,6 +1,7 @@
 package handlers
 
 import (
+	"log"
 	"net/http"
 
 	"github.com/gin-gonic/gin"
@@ -42,6 +43,19 @@ func (h *UserHandler) UpdateProfile(c *gin.Context) {
 	if err := c.ShouldBindJSON(&payload); err != nil {
 		utils.ResponseError(c, err, http.StatusBadRequest)
 		return
+	}
+
+	log.Println("UpdateProfile payload:", payload)
+	if payload.PhoneNumber != nil && payload.CountryCode != nil {
+		if *payload.PhoneNumber != "" && *payload.CountryCode != "" {
+			formattedPhone, err := utils.E164Format(*payload.PhoneNumber, *payload.CountryCode)
+			if err != nil {
+				utils.ResponseError(c, err, http.StatusBadRequest)
+				return
+			}
+
+			payload.PhoneNumber = &formattedPhone
+		}
 	}
 
 	claims, err := utils.GetClaimsCtx(c)

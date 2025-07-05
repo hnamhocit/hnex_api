@@ -1,8 +1,6 @@
 package user
 
 import (
-	"time"
-
 	"hnex.com/internal/models"
 )
 
@@ -13,5 +11,6 @@ type UpdateProfileDTO struct {
 	Bio         *string       `json:"bio,omitempty"`
 	Location    *string       `json:"location,omitempty"`
 	PhoneNumber *string       `json:"phone_number,omitempty"`
-	BirthDay    *time.Time    `json:"birth_day,omitempty"`
+	CountryCode *string       `json:"country_code,omitempty"`
+	BirthDay    *string       `json:"birth_day,omitempty"`
 }
