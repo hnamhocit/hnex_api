@@ -39,7 +39,7 @@ func Init(db *gorm.DB) *AppContainer {
 		SearchHandler:  handlers.NewSearchHandler(searchService),
 		BlogHandler:    handlers.NewBlogHandler(blogService),
 		CourseHandler:  handlers.NewCourseHandler(courseService),
-		ProductHandler: handlers.NewProductHandler(productService),
+		ProductHandler: handlers.NewProductHandler(productService, uploadService),
 		BanHandler:     handlers.NewBanHandler(banService),
 	}
 

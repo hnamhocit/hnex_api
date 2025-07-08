@@ -51,6 +51,7 @@ func SetupRouter(g *gin.Engine, handlers *handlers.Handlers, accessTokenMiddlewa
 		products := api.Group("products")
 		{
 			products.GET("", productHandler.GetProducts)
+			products.POST("", accessTokenMiddleware, productHandler.CreateProduct)
 		}
 
 		blogs := api.Group("blogs")

@@ -29,3 +29,7 @@ func (r *ProductRepository) FindMany(products *[]*models.Product, limit, page in
 func (r *ProductRepository) Create(product *models.Product) error {
 	return r.DB.Create(product).Error
 }
+
+func (r *ProductRepository) UpdateFieldById(id string, field string, value interface{}) error {
+	return r.DB.Model(&models.Product{}).Where("id = ?", id).Update(field, value).Error
+}
